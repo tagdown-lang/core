@@ -94,8 +94,8 @@ export const { parseTag, parseContents, parseEscapeContents, parseNode } = (stat
   let trackRange = false
   let chr: string | undefined
 
-  function hasNext(offset = 0) {
-    return state.pos + offset < state.input.length
+  function hasNext(count = 1) {
+    return state.pos + count <= state.input.length
   }
 
   function hasEnded(offset = 0): boolean {

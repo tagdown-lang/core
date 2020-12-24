@@ -750,34 +750,64 @@ export function testPrinter(input: string | Tag | Tag[]): void {
 //   },
 // ])
 
-testPrinter([
-  {
-    isQuoted: false,
-    isAttribute: false,
-    name: "&",
-    attributes: [],
-    isLiteral: false,
-    contents: [
-      {
-        isQuoted: false,
-        isAttribute: false,
-        name: "l",
-        attributes: [
-          {
-            isQuoted: false,
-            isAttribute: true,
-            name: "t",
-            attributes: [],
-            isLiteral: true,
-            contents: ["{"],
-          },
-        ],
-        isLiteral: false,
-        contents: [],
-      },
-      "\\:",
-    ],
-  },
-])
+// testPrinter([
+//   {
+//     isQuoted: false,
+//     isAttribute: false,
+//     name: "&",
+//     attributes: [],
+//     isLiteral: false,
+//     contents: [
+//       {
+//         isQuoted: false,
+//         isAttribute: false,
+//         name: "l",
+//         attributes: [
+//           {
+//             isQuoted: false,
+//             isAttribute: true,
+//             name: "t",
+//             attributes: [],
+//             isLiteral: true,
+//             contents: ["{"],
+//           },
+//         ],
+//         isLiteral: false,
+//         contents: [],
+//       },
+//       "\\:",
+//     ],
+//   },
+// ])
+
+// testPrinter([
+//   {
+//     isQuoted: false,
+//     isAttribute: false,
+//     name: '"',
+//     attributes: [],
+//     isLiteral: false,
+//     contents: [
+//       {
+//         isQuoted: false,
+//         isAttribute: false,
+//         name: "S",
+//         attributes: [
+//           {
+//             isQuoted: false,
+//             isAttribute: true,
+//             name: "E",
+//             attributes: [],
+//             isLiteral: false,
+//             contents: ["\n"],
+//           },
+//         ],
+//         isLiteral: false,
+//         contents: [],
+//       },
+//       ":",
+//     ],
+//   },
+// ])
 
 // FIXME: Parsing what whe want to print, is different from normal parse input, as it is already parsed text that we again parse.
