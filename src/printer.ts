@@ -418,7 +418,7 @@ export function logPrint(input: string | Content[] | Tag): void {
 }
 
 let hasOneTestFailed = false
-export function testPrinter(input: string | Tag | Tag[]): void {
+export function testPrinter(input: string | Tag | Content[]): void {
   if (hasOneTestFailed) return
   let contents: Content[] | undefined
   let printedContents: string | undefined
@@ -808,6 +808,19 @@ export function testPrinter(input: string | Tag | Tag[]): void {
 //       ":",
 //     ],
 //   },
+// ])
+
+// FIXME: This is broken!
+// testPrinter([
+//   {
+//     isQuoted: false,
+//     isAttribute: false,
+//     name: "5",
+//     attributes: [],
+//     isLiteral: true,
+//     contents: ["{"],
+//   },
+//   "",
 // ])
 
 // FIXME: Parsing what whe want to print, is different from normal parse input, as it is already parsed text that we again parse.
