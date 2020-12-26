@@ -48,6 +48,7 @@ let skipNewLine: boolean
 let isEscapeParse: boolean
 let checkIndentContentsEscape: boolean
 let contentsRange: ParseRange | null
+let isEmptySignificant: boolean
 
 // Primitives
 
@@ -130,9 +131,11 @@ function consumeWhitespace(): void {
 function sliceLineEnd(startPos: number): string {
   if (isEscapeParse) return slice(startPos)
   const text = slice(startPos).trimEnd()
+  isEmptySignificant = false
   if (text.endsWith("\\$")) {
     return text.substring(0, text.length - "\\$".length) + "$"
   } else if (text.endsWith("$")) {
+    isEmptySignificant = true
     return text.substring(0, text.length - "$".length)
   }
   return text
@@ -273,7 +276,7 @@ function parseIndentLiteralText(): string {
   let emptyState: EmptyState | null = null
   while (hasNext()) {
     let content = parseLineLiteralText()
-    if (content === "") {
+    if (content === "" && !isEmptySignificant) {
       if (hasEnded()) break
       const newLinePos = pos()
       assertNewLine()
@@ -560,7 +563,7 @@ const genericContentsParser = (parseText: () => string, parseDelims: () => strin
   const contents: Content[] = []
   while (!hasEnded()) {
     let content: Content | null = parseText()
-    if (content === "") {
+    if (content === "" && !isEmptySignificant) {
       content = parseContentTag(ParseTagScope.Content, contentsLayout)
       if (content === null) {
         content = parseDelims()
@@ -577,7 +580,7 @@ const indentContentsParser = () => (contentsLayout: ContentsLayout): Content[] =
   let emptyState: EmptyState | null = null
   while (!hasEnded()) {
     let content: Content | null = parseLineText()
-    if (content === "") {
+    if (content === "" && !isEmptySignificant) {
       content = parseContentTag(ParseTagScope.Content, contentsLayout)
       if (content === null) {
         content = parseBraceDelims()
@@ -687,6 +690,7 @@ const wrapTopLevelParser = <T>(parse: () => T, b: boolean) => (s: string): T => 
 
   isEscapeParse = b
   checkIndentContentsEscape = false
+  isEmptySignificant = false
 
   const result = parse()
   assert(hasEnded(), "expected end of input")

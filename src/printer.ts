@@ -140,7 +140,7 @@ function escapeTag(tag: PrintTag): void {
   escapeContents(tag.contents, tag)
 }
 
-function escapeEmptyLines(text: string, isLastContent: boolean, tag?: PrintTag): string {
+function escapeEmptyLines(text: string, isLastContent: boolean, tag?: PrintTag, prevTag?: PrintTag): string {
   const lines = text.split(/(\r?\n|\r)/)
   text = ""
   for (let i = 0; i < lines.length; i++) {
@@ -151,7 +151,10 @@ function escapeEmptyLines(text: string, isLastContent: boolean, tag?: PrintTag):
     ) {
       if (line.endsWith("$")) {
         line = line.substring(0, line.length - "$".length) + "\\$"
-      } else if ((line === "" && tag !== undefined) || line.trimEnd() !== line) {
+      } else if (
+        (line === "" && (lines.length > 1 || (prevTag !== undefined && prevTag.isLineBased))) ||
+        line.trimEnd() !== line
+      ) {
         line += "$"
       }
     }
@@ -289,6 +292,7 @@ function escapeTexts(contents: PrintContent[], tag?: PrintTag): void {
   while (oldContents.length > 0) {
     newContents.push(oldContents.shift()!)
   }
+  let prevTag: PrintTag | undefined
   for (let i = 0; i < contents.length; i++) {
     let content = newContents[i]
     if (typeof content === "string") {
@@ -301,7 +305,9 @@ function escapeTexts(contents: PrintContent[], tag?: PrintTag): void {
       ) {
         content = "\\" + content
       }
-      contents[i] = escapeEmptyLines(content, i + 1 === contents.length, tag)
+      contents[i] = escapeEmptyLines(content, i + 1 === contents.length, tag, prevTag)
+    } else {
+      prevTag = content
     }
   }
 }
@@ -482,52 +488,23 @@ export function testPrinter(input: string | Tag | Content[]): void {
   // console.log(reprintedContents)
 }
 
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "U",
-//     attributes: [],
-//     isLiteral: false,
-//     contents: ["{\\{A}}"],
-//   },
-// ])
+// logPrint([])
+// logPrint([""])
+// // testPrinter([""])
 
 // testPrinter([
 //   {
 //     isQuoted: false,
 //     isAttribute: false,
-//     name: "p",
-//     attributes: [],
-//     isLiteral: false,
-//     contents: ["\\\\\\"],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "q",
-//     attributes: [],
-//     isLiteral: false,
-//     contents: [" "],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "=",
+//     name: ".",
 //     attributes: [
 //       {
 //         isQuoted: false,
 //         isAttribute: true,
-//         name: "]",
+//         name: "Q",
 //         attributes: [],
-//         isLiteral: false,
-//         contents: [],
+//         isLiteral: true,
+//         contents: ["}"],
 //       },
 //     ],
 //     isLiteral: false,
@@ -539,288 +516,31 @@ export function testPrinter(input: string | Tag | Content[]): void {
 //   {
 //     isQuoted: false,
 //     isAttribute: false,
-//     name: "=",
+//     name: "a",
 //     attributes: [],
 //     isLiteral: false,
+//     contents: ["{g:}"],
+//   },
+// ])
+
+// testPrinter([
+//   {
+//     isQuoted: false,
+//     isAttribute: false,
+//     name: "7",
+//     attributes: [
+//       {
+//         isQuoted: false,
+//         isAttribute: true,
+//         name: "i",
+//         attributes: [],
+//         isLiteral: true,
+//         contents: ["{"],
+//       },
+//     ],
+//     isLiteral: true,
 //     contents: [""],
 //   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "=",
-//     attributes: [
-//       {
-//         isQuoted: false,
-//         isAttribute: true,
-//         name: "b",
-//         attributes: [],
-//         isLiteral: true,
-//         contents: ["{"],
-//       },
-//     ],
-//     isLiteral: false,
-//     contents: [],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: ",",
-//     attributes: [],
-//     isLiteral: false,
-//     contents: [
-//       {
-//         isQuoted: false,
-//         isAttribute: false,
-//         name: "y",
-//         attributes: [
-//           {
-//             isQuoted: false,
-//             isAttribute: true,
-//             name: "H",
-//             attributes: [],
-//             isLiteral: false,
-//             contents: ["\n"],
-//           },
-//         ],
-//         isLiteral: false,
-//         contents: [],
-//       },
-//       ":",
-//     ],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "}",
-//     attributes: [
-//       {
-//         isQuoted: false,
-//         isAttribute: true,
-//         name: "]",
-//         attributes: [],
-//         isLiteral: true,
-//         contents: ["{"],
-//       },
-//     ],
-//     isLiteral: false,
-//     contents: [
-//       "|",
-//       {
-//         isQuoted: false,
-//         isAttribute: false,
-//         name: "G",
-//         attributes: [],
-//         isLiteral: false,
-//         contents: [],
-//       },
-//       "\\:",
-//     ],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "m",
-//     attributes: [],
-//     isLiteral: false,
-//     contents: [
-//       {
-//         isQuoted: false,
-//         isAttribute: false,
-//         name: "r",
-//         attributes: [],
-//         isLiteral: false,
-//         contents: ["\n"],
-//       },
-//       "\\:",
-//     ],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "4",
-//     attributes: [],
-//     isLiteral: false,
-//     contents: [
-//       {
-//         isQuoted: false,
-//         isAttribute: false,
-//         name: "r",
-//         attributes: [],
-//         isLiteral: false,
-//         contents: ["\n"],
-//       },
-//       ":",
-//     ],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "d",
-//     attributes: [
-//       {
-//         isQuoted: false,
-//         isAttribute: true,
-//         name: "=",
-//         attributes: [
-//           {
-//             isQuoted: false,
-//             isAttribute: true,
-//             name: "u",
-//             attributes: [],
-//             isLiteral: false,
-//             contents: [],
-//           },
-//         ],
-//         isLiteral: false,
-//         contents: [""],
-//       },
-//       {
-//         isQuoted: false,
-//         isAttribute: true,
-//         name: "k",
-//         attributes: [],
-//         isLiteral: false,
-//         contents: ["\n"],
-//       },
-//     ],
-//     isLiteral: false,
-//     contents: [],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "n",
-//     attributes: [],
-//     isLiteral: false,
-//     contents: ["{|:{&}{]} \n"],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "T",
-//     attributes: [],
-//     isLiteral: false,
-//     contents: ["{F: \n}{}"],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "[",
-//     attributes: [],
-//     isLiteral: false,
-//     contents: [
-//       "={d}",
-//       {
-//         isQuoted: false,
-//         isAttribute: false,
-//         name: "l",
-//         attributes: [],
-//         isLiteral: false,
-//         contents: [],
-//       },
-//       "B",
-//     ],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "&",
-//     attributes: [],
-//     isLiteral: false,
-//     contents: [
-//       {
-//         isQuoted: false,
-//         isAttribute: false,
-//         name: "l",
-//         attributes: [
-//           {
-//             isQuoted: false,
-//             isAttribute: true,
-//             name: "t",
-//             attributes: [],
-//             isLiteral: true,
-//             contents: ["{"],
-//           },
-//         ],
-//         isLiteral: false,
-//         contents: [],
-//       },
-//       "\\:",
-//     ],
-//   },
-// ])
-
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: '"',
-//     attributes: [],
-//     isLiteral: false,
-//     contents: [
-//       {
-//         isQuoted: false,
-//         isAttribute: false,
-//         name: "S",
-//         attributes: [
-//           {
-//             isQuoted: false,
-//             isAttribute: true,
-//             name: "E",
-//             attributes: [],
-//             isLiteral: false,
-//             contents: ["\n"],
-//           },
-//         ],
-//         isLiteral: false,
-//         contents: [],
-//       },
-//       ":",
-//     ],
-//   },
-// ])
-
-// FIXME: This is broken!
-// testPrinter([
-//   {
-//     isQuoted: false,
-//     isAttribute: false,
-//     name: "5",
-//     attributes: [],
-//     isLiteral: true,
-//     contents: ["{"],
-//   },
-//   "",
 // ])
 
 // FIXME: Parsing what whe want to print, is different from normal parse input, as it is already parsed text that we again parse.
