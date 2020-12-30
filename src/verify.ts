@@ -215,7 +215,7 @@ const lossless = jsc.forall(arbContents, contents => {
 
 const result = jsc.check(lossless, {
   quiet: true,
-  tests: 1000,
+  tests: 500,
 })
 
 if (typeof result === "object") {

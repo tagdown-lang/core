@@ -35,7 +35,7 @@ enum ParseTagScope {
 
 let input: string
 let p: number
-let c: string | undefined
+let c: string
 
 let dedentLevel: number | null
 let dedents: number
@@ -48,7 +48,6 @@ let skipNewLine: boolean
 let isEscapeParse: boolean
 let checkIndentContentsEscape: boolean
 let contentsRange: ParseRange | null
-let isEmptySignificant: boolean
 
 // Primitives
 
@@ -128,17 +127,15 @@ function consumeWhitespace(): void {
 
 // Helpers
 
-function sliceLineEnd(startPos: number): string {
-  if (isEscapeParse) return slice(startPos)
+function sliceLineEnd(startPos: number): string | null {
+  if (isEscapeParse) return slice(startPos) || null
   const text = slice(startPos).trimEnd()
-  isEmptySignificant = false
   if (text.endsWith("\\$")) {
     return text.substring(0, text.length - "\\$".length) + "$"
   } else if (text.endsWith("$")) {
-    isEmptySignificant = true
     return text.substring(0, text.length - "$".length)
   }
-  return text
+  return text || null
 }
 
 function parseIndent(maxLevel: number): number {
@@ -199,12 +196,12 @@ function assertNewLine(): void {
 
 // Parsers
 
-function parseBraceText(): string {
+function parseBraceText(): string | null {
   let text = ""
   let startPos = pos()
   while (hasNext() && !isOneOf("{}")) {
     if (isNewline()) {
-      text += sliceLineEnd(startPos)
+      text += sliceLineEnd(startPos) || ""
       startPos = pos()
       assertNewLine()
       continue
@@ -221,16 +218,16 @@ function parseBraceText(): string {
     next()
   }
   text += slice(startPos)
-  return text
+  return text || null
 }
 
-function parseBraceLiteralText(): string {
+function parseBraceLiteralText(): string | null {
   let text = ""
   let startPos = pos()
   let unbalanced = 0
   while (hasNext() && !(chr() === "}" && unbalanced === 0)) {
     if (isNewline()) {
-      text += sliceLineEnd(startPos)
+      text += sliceLineEnd(startPos) || ""
       startPos = pos()
       assertNewLine()
       continue
@@ -240,10 +237,10 @@ function parseBraceLiteralText(): string {
     next()
   }
   text += slice(startPos)
-  return text
+  return text || null
 }
 
-function parseLineText(): string {
+function parseLineText(): string | null {
   if (checkIndentContentsEscape && isStr("\\:")) {
     if (!isEscapeParse) next() // delete "\\"
   }
@@ -261,22 +258,23 @@ function parseLineText(): string {
     }
     next()
   }
-  text += isLineEnd() ? sliceLineEnd(startPos) : slice(startPos)
-  return text
+  const endText = isLineEnd() ? sliceLineEnd(startPos) : slice(startPos) || null
+  if (endText === "") return text
+  return text + (endText || "") || null
 }
 
-function parseLineLiteralText(): string {
+function parseLineLiteralText(): string | null {
   const startPos = pos()
   while (!isLineEnd()) next()
   return sliceLineEnd(startPos)
 }
 
-function parseIndentLiteralText(): string {
+function parseIndentLiteralText(): string | null {
   let text = ""
   let emptyState: EmptyState | null = null
   while (hasNext()) {
     let content = parseLineLiteralText()
-    if (content === "" && !isEmptySignificant) {
+    if (content === null) {
       if (hasEnded()) break
       const newLinePos = pos()
       assertNewLine()
@@ -309,7 +307,7 @@ function parseIndentLiteralText(): string {
   if (emptyState !== null) {
     backtrack(emptyState.startPos)
   }
-  return text
+  return text || null
 }
 
 // In the case of brace tags, these will be the braces that are not part of a tag,
@@ -373,13 +371,16 @@ function parseName(): string | null {
     }
   }
   name += slice(startPos)
-  if (!(name !== "")) return null
-  return name
+  return name || null
 }
 
-function parseContentsRange(parseContents: () => Content[]): Content[] {
+function wrapContentsParsers(
+  isLiteral: boolean,
+  parseLiteralText: () => string | null,
+  parseContents: () => Content[],
+): Content[] {
   const startPos = pos()
-  const contents = parseContents()
+  const contents = isLiteral ? [parseLiteralText() || ""] : parseContents()
   if (isEscapeParse && contents.length > 0) {
     contentsRange = {
       start: startPos,
@@ -420,14 +421,14 @@ function tryParseContentTag(scope: ParseTagScope, contentsLayout?: ContentsLayou
     if (variant === ContentsLayout.Brace) {
       if (chr() === " ") next()
       unbraced++
-      contents = parseContentsRange(() => (isLiteral ? [parseBraceLiteralText()] : parseBraceContents()))
+      contents = wrapContentsParsers(isLiteral, parseBraceLiteralText, parseBraceContents)
       unbraced--
       if (!matchChr("}")) return null
     } else {
       if (!(scope === ParseTagScope.BlockAttr || scope === ParseTagScope.Content)) return null
       if (!matchChr("}")) return null
       if (chr() === " ") next()
-      contents = parseContentsRange(() => (isLiteral ? [parseLineLiteralText()] : parseLineContents()))
+      contents = wrapContentsParsers(isLiteral, parseLineLiteralText, parseLineContents)
       const newLinePos = pos()
       if (contents[0] === "" && matchNewLine()) {
         indentLevel++
@@ -447,9 +448,7 @@ function tryParseContentTag(scope: ParseTagScope, contentsLayout?: ContentsLayou
             if (chr() === " ") next()
             dedentLevel = null
             dedents = 0
-            contents = parseContentsRange(() =>
-              isLiteral ? [parseIndentLiteralText()] : parseIndentContents(),
-            )
+            contents = wrapContentsParsers(isLiteral, parseIndentLiteralText, parseIndentContents)
           } else if (blockAttributes.length > 0) {
             contents = []
             assert(attrNewLinePos !== undefined, "expected attribute new line position to be defined")
@@ -521,6 +520,7 @@ function parseContentTag(scope: ParseTagScope, contentsLayout?: ContentsLayout):
       start: startPos,
       end: pos(),
     }
+    // @ts-ignore
     tag.contentsRange = contentsRange
   }
   return tag
@@ -557,13 +557,13 @@ function appendContent(contentsLayout: ContentsLayout, contents: Content[], cont
   }
 }
 
-const genericContentsParser = (parseText: () => string, parseDelims: () => string | null) => (
+const genericContentsParser = (parseText: () => string | null, parseDelims: () => string | null) => (
   contentsLayout: ContentsLayout,
 ): Content[] => {
   const contents: Content[] = []
   while (!hasEnded()) {
     let content: Content | null = parseText()
-    if (content === "" && !isEmptySignificant) {
+    if (content === null) {
       content = parseContentTag(ParseTagScope.Content, contentsLayout)
       if (content === null) {
         content = parseDelims()
@@ -580,7 +580,7 @@ const indentContentsParser = () => (contentsLayout: ContentsLayout): Content[] =
   let emptyState: EmptyState | null = null
   while (!hasEnded()) {
     let content: Content | null = parseLineText()
-    if (content === "" && !isEmptySignificant) {
+    if (content === null) {
       content = parseContentTag(ParseTagScope.Content, contentsLayout)
       if (content === null) {
         content = parseBraceDelims()
@@ -690,7 +690,6 @@ const wrapTopLevelParser = <T>(parse: () => T, b: boolean) => (s: string): T => 
 
   isEscapeParse = b
   checkIndentContentsEscape = false
-  isEmptySignificant = false
 
   const result = parse()
   assert(hasEnded(), "expected end of input")
