@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "outDir": "lib",
+    "rootDir": "src",
     "strictNullChecks": true,
     "moduleResolution": "node",
     "target": "ES2019",

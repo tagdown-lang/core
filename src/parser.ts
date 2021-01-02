@@ -15,8 +15,10 @@ export type ParseRange = {
   end: number
 }
 
-export type ParseTag = Tag & {
-  range?: ParseRange
+export interface ParseTag extends Tag {
+  attributes: ParseTag[]
+  contents: ParseContent[]
+  range: ParseRange
   contentsRange?: ParseRange
 }
 
@@ -95,14 +97,14 @@ function isStr(s: string, offset = 0): boolean {
   return true
 }
 
-function isOneOf(search: string, offset = 0): boolean {
-  return hasNext(offset) && search.includes(peek(offset)!)
+function isOneOf(chrs: string, offset = 0): boolean {
+  return hasNext(offset) && chrs.includes(peek(offset)!)
 }
 
-function escapedOneOf(search: string): boolean {
+function escapedOneOf(chrs: string): boolean {
   if (!hasNext(1)) return false
   const c1 = peek(1)!
-  return chr() === "\\" && (c1 === "\\" || search.includes(c1))
+  return chr() === "\\" && (c1 === "\\" || chrs.includes(c1))
 }
 
 // Checkers
@@ -206,14 +208,10 @@ function parseBraceText(): string | null {
       assertNewLine()
       continue
     }
-    if (escapedOneOf("{}")) {
-      if (isEscapeParse) {
-        next() // skip "\\"
-      } else {
-        text += slice(startPos)
-        next() // delete "\\"
-        startPos = pos()
-      }
+    if (!isEscapeParse && escapedOneOf("{}")) {
+      text += slice(startPos)
+      next() // delete "\\"
+      startPos = pos()
     }
     next()
   }
@@ -241,20 +239,16 @@ function parseBraceLiteralText(): string | null {
 }
 
 function parseLineText(): string | null {
-  if (checkIndentContentsEscape && isStr("\\:")) {
-    if (!isEscapeParse) next() // delete "\\"
+  if (!isEscapeParse && checkIndentContentsEscape && isStr("\\:")) {
+    next() // delete "\\"
   }
   let text = ""
   let startPos = pos()
   while (hasNext() && !(isOneOf("{}") || isNewline())) {
-    if (escapedOneOf("{}")) {
-      if (isEscapeParse) {
-        next() // skip "\\"
-      } else {
-        text += slice(startPos)
-        next() // delete "\\"
-        startPos = pos()
-      }
+    if (!isEscapeParse && escapedOneOf("{}")) {
+      text += slice(startPos)
+      next() // delete "\\"
+      startPos = pos()
     }
     next()
   }
@@ -333,9 +327,9 @@ function parseName(): string | null {
   // At the start of a tag can occur indicators,
   // however from the first indicator that is escaped going forwards,
   // all indicators will be considered part of the name.
-  if (escapedOneOf("'@")) {
-    next() // skip "\\"
-    if (!isEscapeParse) startPos = pos() // delete "\\"
+  if (!isEscapeParse && escapedOneOf("'@")) {
+    next() // delete "\\"
+    startPos = pos()
     next() // skip escaped (potentially "\\", hence its necessary to skip)
   }
   // A tag name ends when a brace occurs, signifying the start of an attribute,
@@ -343,14 +337,10 @@ function parseName(): string | null {
   let linePos: number | null = null
   while (hasNext() && !isOneOf("{}:")) {
     if (isNewline()) return null
-    if (escapedOneOf("{}:")) {
-      if (isEscapeParse) {
-        next() // skip "\\"
-      } else {
-        name += slice(startPos)
-        next() // delete "\\"
-        startPos = pos()
-      }
+    if (!isEscapeParse && escapedOneOf("{}:")) {
+      name += slice(startPos)
+      next() // delete "\\"
+      startPos = pos()
     } else if (chr() === "=" || escapedOneOf("=")) {
       linePos = pos()
       if (chr() === "\\") next()
@@ -374,7 +364,7 @@ function parseName(): string | null {
   return name || null
 }
 
-function wrapContentsParsers(
+function parseTagContents(
   isLiteral: boolean,
   parseLiteralText: () => string | null,
   parseContents: () => Content[],
@@ -390,7 +380,7 @@ function wrapContentsParsers(
   return contents
 }
 
-function tryParseContentTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): ParseTag | null {
+function tryParseContentTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag | null {
   if (!matchChr("{")) return null
   const isQuoted = matchChr("'")
   const isAttribute = matchChr("@")
@@ -421,14 +411,14 @@ function tryParseContentTag(scope: ParseTagScope, contentsLayout?: ContentsLayou
     if (variant === ContentsLayout.Brace) {
       if (chr() === " ") next()
       unbraced++
-      contents = wrapContentsParsers(isLiteral, parseBraceLiteralText, parseBraceContents)
+      contents = parseTagContents(isLiteral, parseBraceLiteralText, parseBraceContents)
       unbraced--
       if (!matchChr("}")) return null
     } else {
       if (!(scope === ParseTagScope.BlockAttr || scope === ParseTagScope.Content)) return null
       if (!matchChr("}")) return null
       if (chr() === " ") next()
-      contents = wrapContentsParsers(isLiteral, parseLineLiteralText, parseLineContents)
+      contents = parseTagContents(isLiteral, parseLineLiteralText, parseLineContents)
       const newLinePos = pos()
       if (contents[0] === "" && matchNewLine()) {
         indentLevel++
@@ -448,7 +438,7 @@ function tryParseContentTag(scope: ParseTagScope, contentsLayout?: ContentsLayou
             if (chr() === " ") next()
             dedentLevel = null
             dedents = 0
-            contents = wrapContentsParsers(isLiteral, parseIndentLiteralText, parseIndentContents)
+            contents = parseTagContents(isLiteral, parseIndentLiteralText, parseIndentContents)
           } else if (blockAttributes.length > 0) {
             contents = []
             assert(attrNewLinePos !== undefined, "expected attribute new line position to be defined")
@@ -507,10 +497,10 @@ function tryParseContentTag(scope: ParseTagScope, contentsLayout?: ContentsLayou
   }
 }
 
-function parseContentTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag | null {
+function parseContentTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): ParseTag | null {
   contentsRange = null
   const startPos = pos()
-  const tag = tryParseContentTag(scope, contentsLayout)
+  const tag = tryParseContentTag(scope, contentsLayout) as ParseTag | null
   if (tag === null) {
     backtrack(startPos)
     return null
@@ -520,8 +510,7 @@ function parseContentTag(scope: ParseTagScope, contentsLayout?: ContentsLayout):
       start: startPos,
       end: pos(),
     }
-    // @ts-ignore
-    tag.contentsRange = contentsRange
+    if (contentsRange) tag.contentsRange = contentsRange
   }
   return tag
 }

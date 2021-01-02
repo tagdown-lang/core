@@ -339,3 +339,181 @@ testPrinter([
   },
   "",
 ])
+
+testPrinter([
+  {
+    isQuoted: false,
+    isAttribute: false,
+    name: ".",
+    attributes: [
+      {
+        isQuoted: false,
+        isAttribute: true,
+        name: "Q",
+        attributes: [],
+        isLiteral: true,
+        contents: ["}"],
+      },
+    ],
+    isLiteral: false,
+    contents: [],
+  },
+])
+
+testPrinter([
+  {
+    isQuoted: false,
+    isAttribute: false,
+    name: "a",
+    attributes: [],
+    isLiteral: false,
+    contents: ["{g:}"],
+  },
+])
+
+testPrinter([
+  {
+    isQuoted: false,
+    isAttribute: false,
+    name: "7",
+    attributes: [
+      {
+        isQuoted: false,
+        isAttribute: true,
+        name: "i",
+        attributes: [],
+        isLiteral: true,
+        contents: ["{"],
+      },
+    ],
+    isLiteral: true,
+    contents: [""],
+  },
+])
+
+testPrinter([
+  {
+    isQuoted: false,
+    isAttribute: false,
+    name: "Y",
+    attributes: [],
+    isLiteral: false,
+    contents: ["{{W: \n}"],
+  },
+])
+
+testPrinter([
+  {
+    isQuoted: false,
+    isAttribute: false,
+    name: "Z",
+    attributes: [],
+    isLiteral: false,
+    contents: [
+      "\n",
+      {
+        isQuoted: false,
+        isAttribute: false,
+        name: "6",
+        attributes: [],
+        isLiteral: false,
+        contents: [],
+      },
+    ],
+  },
+])
+
+testPrinter([
+  {
+    isQuoted: false,
+    isAttribute: false,
+    name: "~",
+    attributes: [],
+    isLiteral: false,
+    contents: ["Q{C!}>{m8i{"],
+  },
+])
+
+testPrinter([
+  {
+    isQuoted: false,
+    isAttribute: false,
+    name: "G",
+    attributes: [],
+    isLiteral: false,
+    contents: [
+      "Z",
+      {
+        isQuoted: false,
+        isAttribute: false,
+        name: "7",
+        attributes: [],
+        isLiteral: false,
+        contents: [],
+      },
+      "}",
+    ],
+  },
+])
+
+testPrinter([
+  {
+    isQuoted: false,
+    isAttribute: false,
+    name: "1",
+    attributes: [
+      {
+        isQuoted: false,
+        isAttribute: true,
+        name: "0",
+        attributes: [],
+        isLiteral: false,
+        contents: ["{\\:"],
+      },
+      {
+        isQuoted: false,
+        isAttribute: true,
+        name: "T",
+        attributes: [],
+        isLiteral: true,
+        contents: ["}"],
+      },
+    ],
+    isLiteral: false,
+    contents: [],
+  },
+  "}",
+])
+
+testPrinter([
+  {
+    isQuoted: false,
+    isAttribute: false,
+    name: "Y",
+    attributes: [],
+    isLiteral: false,
+    contents: ["{:"],
+  },
+])
+
+testPrinter([
+  {
+    isQuoted: false,
+    isAttribute: false,
+    name: "t",
+    attributes: [],
+    isLiteral: false,
+    contents: ["\\{0}\n"],
+  },
+])
+
+testPrinter([
+  {
+    isQuoted: false,
+    isAttribute: false,
+    name: ")",
+    attributes: [],
+    isLiteral: false,
+    contents: ["{{D}\n"],
+  },
+])
