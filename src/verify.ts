@@ -5,8 +5,6 @@ import { inspect } from "./utils"
 import { printContents, testPrinter } from "./printer"
 import { parseContents } from "./parser"
 
-// Alternative to jsverify: https://github.com/dubzzz/fast-check
-
 const gen = jsc.generator
 const shr = jsc.shrink
 
@@ -40,9 +38,9 @@ function joinTexts(contents: Content[]): Content[] {
   return contents.reduceRight((contents, content) => {
     if (typeof content === "string" && typeof contents[0] === "string") {
       contents[0] = content + contents[0]
-      return contents
+    } else {
+      contents.unshift(content)
     }
-    contents.unshift(content)
     return contents
   }, [] as Content[])
 }
@@ -53,7 +51,6 @@ const specialProbs = {
   "}": 3,
   ": ": 2,
   "\n": 1,
-  // "\r": 1,
   "": 12,
 }
 
@@ -131,6 +128,7 @@ const genTagContents = (genTag: jsc.Generator<Tag>) =>
 const genSTag = (genTag: jsc.Generator<Tag>) =>
   gen.combine(genTagName, genAttributes(genTag), genTagContents(genTag), mapTagGen)
 
+// Bug in verify.d.ts.
 // @ts-ignore
 const genTag = gen.recursive(genZTag, genSTag)
 
@@ -220,7 +218,7 @@ const result = jsc.check(lossless, {
 
 if (typeof result === "object") {
   console.log(
-    `Failed after ${result.tests} tests and ${result.shrinks} shrinks with RNG state ${result.rngState}.`,
+    `Failed after ${result.tests} tests and ${result.shrinks} shrinks with seed ${result.rngState}.`,
   )
   // Bug in verify.d.ts.
   // @ts-ignore

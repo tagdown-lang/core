@@ -536,11 +536,6 @@ function appendContent(contentsLayout: ContentsLayout, contents: Content[], cont
       skipNewLine = false
       assertNewLine()
       assert(matchIndent(indentLevel), "expected indentation")
-      if (chr() === "\\" && isSpaceOrLineEnd(1)) {
-        next()
-        if (chr() === " ") next()
-        contents.push("  ")
-      }
       if (contentsLayout & ContentsLayout.Indent) appendText(contents, "")
     }
   }
