@@ -1,7 +1,7 @@
 import * as fc from "fast-check"
-import { parseContents } from "./parser"
-import { printContents, testPrinter } from "./printer"
-import { Content, Tag } from "./types"
+
+import { Content, logPrint, parseContents, printContents, Tag } from "."
+import { log } from "./utils"
 
 function joinTexts(contents: Content[]): Content[] {
   return contents.reduceRight((contents, content) => {
@@ -37,31 +37,48 @@ const textArb = fc.stringOf(
   ),
 )
 
-const tagArb: fc.Memo<Tag> = fc.memo(n =>
-  fc
-    .record({
-      isQuoted: oneOutOf(10),
-      isAttribute: oneOutOf(3),
-      name: fc.stringOf(visibleAsciiArb, { minLength: 1 }),
-      attributes:
-        n > 1
-          ? fc.array(
-              tagArb().map(tag => {
-                tag.isAttribute = true
-                return tag
-              }),
-            )
-          : fc.constant([]),
-      isLiteral: oneOutOf(4),
-      contents: n > 1 ? contentsArb() : fc.array(textArb, { maxLength: 1 }),
-    })
-    .map(tag => {
-      tag.isLiteral = tag.isLiteral && tag.contents.length === 1 && typeof tag.contents[0] === "string"
-      return tag
-    }),
-)
+const tagArb = (contents: Content[]): fc.Memo<Tag> =>
+  fc.memo(n =>
+    fc
+      .record({
+        isQuoted: oneOutOf(10),
+        isAttribute: oneOutOf(3),
+        name: fc.stringOf(visibleAsciiArb, { minLength: 1 }),
+        attributes: fc.boolean().chain(b =>
+          b && n > 1
+            ? fc.array(
+                contentsArb(n - 1)
+                  .chain(contents => tagArb(contents)(n - 1))
+                  .map(tag => ({ ...tag, isAttribute: true })),
+              )
+            : fc.constant([]),
+        ),
+        isLiteral: oneOutOf(4),
+      })
+      .map(tag => ({
+        ...tag,
+        isLiteral: tag.isLiteral && contents.length === 1 && typeof contents[0] === "string",
+        contents,
+      })),
+  )
 
-const contentsArb = fc.memo(n => fc.array(fc.oneof(textArb, tagArb(n))).map(joinTexts))
+const contentsArb: fc.Memo<Content[]> = fc.memo(n =>
+  n > 1
+    ? fc
+        .array(
+          fc.oneof(
+            textArb,
+            contentsArb(n - 1).chain(contents =>
+              fc
+                .boolean()
+                .chain(b => (b ? tagArb(contents)(n - 1).map(tag => [tag]) : fc.constant(contents))),
+            ),
+          ),
+        )
+        .map(contents => contents.flat())
+        .map(joinTexts)
+    : fc.array(textArb, { maxLength: 1 }),
+)
 
 fc.assert(
   fc.property(contentsArb(5), contents => {
@@ -73,7 +90,7 @@ fc.assert(
       if (out.failed) {
         console.log(`Failed after ${out.numRuns} tests and ${out.numShrinks} shrinks with seed ${out.seed}.`)
         if (out.counterexample !== null && out.counterexample.length > 0) {
-          testPrinter(out.counterexample[0])
+          logPrint(out.counterexample[0])
         }
       }
     },

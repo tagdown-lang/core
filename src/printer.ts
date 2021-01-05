@@ -1,40 +1,39 @@
-import { ContentsLayout, ParseContent, parseContents, parseEscapeContents, ParseTag } from "./parser"
-import { Tag, Content } from "./types"
-import { assert, log } from "./utils"
+import { Content, ContentsLayout, Tag } from "./types"
+import { assert } from "./utils"
 
-interface PrintTag extends Tag {
+export interface PrintTag extends Tag {
   attributes: PrintTag[]
   contents: PrintContent[]
   contentsLayout: ContentsLayout
 }
 
-type PrintContent = string | PrintTag
+export type PrintContent = string | PrintTag
 
 // Check
 
-function isAtomTag(tag: PrintTag): boolean {
+export function isAtomTag(tag: PrintTag): boolean {
   return tag.contentsLayout === ContentsLayout.Atom
 }
 
-function isBraceTag(tag: PrintTag): boolean {
+export function isBraceTag(tag: PrintTag): boolean {
   return tag.contentsLayout === ContentsLayout.Brace
 }
 
-function isLineTag(tag: PrintTag): boolean {
+export function isLineTag(tag: PrintTag): boolean {
   return tag.contentsLayout === ContentsLayout.Line
 }
 
-function isIndentTag(tag: PrintTag): boolean {
+export function isIndentTag(tag: PrintTag): boolean {
   return tag.contentsLayout === ContentsLayout.Indent
 }
 
-function isInlineTag(tag: PrintTag): boolean {
+export function isInlineTag(tag: PrintTag): boolean {
   return isAtomTag(tag) || isBraceTag(tag)
 }
 
 // Prepare
 
-function prepareTag(tag: Tag): PrintTag {
+export function prepareTag(tag: Tag): PrintTag {
   return {
     ...tag,
     attributes: tag.attributes.map(prepareTag),
@@ -43,13 +42,13 @@ function prepareTag(tag: Tag): PrintTag {
   }
 }
 
-function prepareContents(contents: Content[]): PrintContent[] {
+export function prepareContents(contents: Content[]): PrintContent[] {
   return contents.map(content => (typeof content !== "string" ? prepareTag(content) : content))
 }
 
 // Layout
 
-function layoutTag(tag: PrintTag, parentTag?: PrintTag): void {
+export function layoutTag(tag: PrintTag, parentTag?: PrintTag): void {
   for (const attr of tag.attributes) layoutTag(attr, tag)
   layoutContents(tag.contents, tag)
   if (tag.attributes.length > 2) {
@@ -74,7 +73,7 @@ function layoutTag(tag: PrintTag, parentTag?: PrintTag): void {
   }
 }
 
-function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
+export function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
   for (const content of contents) if (typeof content !== "string") layoutTag(content)
   if (!tag || isIndentTag(tag)) return
   let hasLineTag = false
@@ -109,7 +108,7 @@ function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
 
 // Assert
 
-function assertTag(tag: PrintTag) {
+export function assertTag(tag: PrintTag) {
   assert(!/\r?\n/.test(tag.name), "newlines are disallowed in tag names")
   if (isAtomTag(tag)) {
     assert(tag.contents.length === 0, "atom tags must have no contents")
@@ -132,7 +131,7 @@ function assertTag(tag: PrintTag) {
   }
 }
 
-function assertContents(contents: PrintContent[]): void {
+export function assertContents(contents: PrintContent[]): void {
   let isPrevText = false
   for (const content of contents) {
     if (typeof content === "string") {
@@ -175,13 +174,13 @@ function escapeTagName(tag: PrintTag): string {
   return name
 }
 
-function escapeTag(tag: PrintTag): void {
+export function escapeTag(tag: PrintTag): void {
   tag.name = escapeTagName(tag)
   for (const attr of tag.attributes) escapeTag(attr)
   escapeContents(tag.contents, tag)
 }
 
-function escapeContents(contents: PrintContent[], tag?: PrintTag): void {
+export function escapeContents(contents: PrintContent[], tag?: PrintTag): void {
   if (tag && tag.isLiteral) {
     contents[0] = escapeEmptyLines(contents[0] as string, true, tag)
   } else {
@@ -204,7 +203,7 @@ function escapeContents(contents: PrintContent[], tag?: PrintTag): void {
 
 // Output
 
-function outputTag(tag: PrintTag, indentLevel: number): string {
+export function outputTag(tag: PrintTag, indentLevel: number): string {
   let output = "{"
   if (tag.isQuoted) output += "'"
   if (tag.isAttribute) output += "@"
@@ -233,7 +232,7 @@ function outputTag(tag: PrintTag, indentLevel: number): string {
   return output
 }
 
-function outputContents(contents: PrintContent[], tag?: PrintTag, indentLevel = 0): string {
+export function outputContents(contents: PrintContent[], tag?: PrintTag, indentLevel = 0): string {
   let output = ""
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i]
@@ -251,85 +250,4 @@ function outputContents(contents: PrintContent[], tag?: PrintTag, indentLevel = 
     }
   }
   return output
-}
-
-// Exports
-
-export function printContents(contents: Content[]): string {
-  const preparedContents = prepareContents(contents)
-  layoutContents(preparedContents)
-  assertContents(preparedContents)
-  escapeContents(preparedContents)
-  return outputContents(preparedContents)
-}
-
-export function logPrint(input: string | Content[] | Tag): void {
-  let contents
-  if (typeof input === "string") {
-    log(input)
-    console.log(input)
-    contents = parseContents(input)
-  } else if (Array.isArray(input)) {
-    contents = input
-  } else {
-    contents = [input]
-  }
-  log(contents)
-  const output = printContents(contents)
-  log(output)
-  console.log(output)
-  log(parseContents(output))
-}
-
-let hasOneTestFailed = false
-export function testPrinter(input: string | Tag | Content[]): void {
-  if (hasOneTestFailed) return
-  let contents: Content[] | undefined
-  let printedContents: string | undefined
-  let parsedContents: Content[] | undefined
-  for (;;) {
-    if (typeof input === "string") {
-      try {
-        contents = parseContents(input)
-      } catch (e) {
-        console.log(e)
-        console.log("Failed to parse input contents.")
-        break
-      }
-    } else if (Array.isArray(input)) {
-      contents = input
-    } else {
-      contents = [input]
-    }
-    try {
-      printedContents = printContents(contents)
-    } catch (e) {
-      console.log(e)
-      console.log("Failed to print the contents.")
-      break
-    }
-    try {
-      parsedContents = parseContents(printedContents)
-      if (typeof input === "object" && JSON.stringify(contents) === JSON.stringify(parsedContents)) {
-        return
-      }
-    } catch (e) {
-      console.log(e)
-      console.log("Failed to parse the contents.")
-      break
-    }
-    break
-  }
-  hasOneTestFailed = true
-  if (typeof input === "string") {
-    log(input)
-    console.log(input)
-  }
-  if (!contents) return
-  log(contents)
-  if (!printedContents) return
-  log(printedContents)
-  console.log(printedContents)
-  if (!parsedContents) return
-  log(parsedContents)
 }

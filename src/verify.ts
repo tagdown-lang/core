@@ -1,9 +1,9 @@
 import * as jsc from "jsverify"
 import * as lazyseq from "lazy-seq"
+
+import { logPrint, parseContents, printContents } from "."
 import { Content, Tag } from "./types"
-import { inspect } from "./utils"
-import { printContents, testPrinter } from "./printer"
-import { parseContents } from "./parser"
+import { inspect, log } from "./utils"
 
 const gen = jsc.generator
 const shr = jsc.shrink
@@ -49,7 +49,7 @@ const specialProbs = {
   "\\": 1,
   "{": 3,
   "}": 3,
-  ": ": 2,
+  ":": 2,
   "\n": 1,
   "": 12,
 }
@@ -223,6 +223,6 @@ if (typeof result === "object") {
   // Bug in verify.d.ts.
   // @ts-ignore
   if (result.counterexample.length > 0) {
-    testPrinter(result.counterexample[0])
+    logPrint(result.counterexample[0])
   }
 }
