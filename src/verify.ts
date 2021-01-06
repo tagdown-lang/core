@@ -3,7 +3,7 @@ import * as lazyseq from "lazy-seq"
 
 import { logPrint, parseContents, printContents } from "."
 import { Content, Tag } from "./types"
-import { inspect, log } from "./utils"
+import { inspect } from "./utils"
 
 const gen = jsc.generator
 const shr = jsc.shrink
@@ -30,9 +30,9 @@ function alphabetToStringArbitrary(alphabet: string): jsc.Arbitrary<string> {
   )
 }
 
-const visibleAscii =
-  "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
-const arbVisibleAscii = alphabetToStringArbitrary(visibleAscii)
+const arbVisibleAscii = alphabetToStringArbitrary(
+  "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+)
 
 function joinTexts(contents: Content[]): Content[] {
   return contents.reduceRight((contents, content) => {
@@ -128,11 +128,9 @@ const genTagContents = (genTag: jsc.Generator<Tag>) =>
 const genSTag = (genTag: jsc.Generator<Tag>) =>
   gen.combine(genTagName, genAttributes(genTag), genTagContents(genTag), mapTagGen)
 
-// Bug in verify.d.ts.
-// @ts-ignore
-const genTag = gen.recursive(genZTag, genSTag)
+// @ts-ignore: Bug in verify.d.ts.
+const genTag = gen.recursive(genZTag, genSTag) as jsc.Generator<Tag>
 
-const genContent = genTagContent(genTag)
 const genContents = genTagContents(genTag)
 
 // A shrinker behaves the best when the smallest values to still fail the propery are returned first.
@@ -195,15 +193,12 @@ function shrinkTag(ensureIsAttribute: boolean) {
   })
 }
 
-const shrContent = shr.bless((content: Content) =>
+const shrContent = shr.bless<Content>(content =>
   typeof content === "string" ? shrText(content) : shrContentTag(content),
 )
 
-const shrContents = shr.bless((contents: Content[]) => shr.array(shrContent)(contents).map(joinTexts))
+const shrContents = shr.bless<Content[]>(contents => shr.array(shrContent)(contents).map(joinTexts))
 
-const arbText = bless(genText, shrText)
-const arbTag = bless(genTag, shrContentTag)
-const arbContent = bless(genContent, shrContent)
 const arbContents = bless(genContents, shrContents)
 
 const lossless = jsc.forall(arbContents, contents => {
@@ -213,16 +208,16 @@ const lossless = jsc.forall(arbContents, contents => {
 
 const result = jsc.check(lossless, {
   quiet: true,
-  tests: 500,
+  tests: 100,
 })
 
 if (typeof result === "object") {
   console.log(
     `Failed after ${result.tests} tests and ${result.shrinks} shrinks with seed ${result.rngState}.`,
   )
-  // Bug in verify.d.ts.
-  // @ts-ignore
+  // @ts-ignore: Bug in verify.d.ts.
   if (result.counterexample.length > 0) {
+    // @ts-ignore: Bug in verify.d.ts.
     logPrint(result.counterexample[0])
   }
 }

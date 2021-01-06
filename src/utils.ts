@@ -8,13 +8,13 @@ export function assert(condition: any, message: string): asserts condition {
   }
 }
 
-export function inspect(arg) {
+export function inspect(arg: any): string {
   return util.inspect(arg, {
     depth: null,
     colors: true,
   })
 }
 
-export function log(...args) {
+export function log(...args: any[]): void {
   console.log(...args.map(inspect))
 }

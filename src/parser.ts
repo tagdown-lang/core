@@ -1,5 +1,7 @@
-import { Tag, Content, ContentsLayout } from "./types"
+import { Content, ContentsLayout, Tag } from "./types"
 import { assert } from "./utils"
+
+// Types
 
 export enum ParseTagScope {
   InlineAttr,
@@ -12,9 +14,11 @@ type EmptyState = {
   newLines: string
 }
 
+// State
+
 let input: string
 let p: number
-let c: string
+let c: string | undefined
 
 let dedentLevel: number | null
 let dedents: number
@@ -24,6 +28,16 @@ let indentLevel: number
 let contentIndentLevels: number[]
 let unbraced: number
 let skipNewLine: boolean
+
+// Getters
+
+export function pos(): number {
+  return p
+}
+
+export function chr(): string | undefined {
+  return c
+}
 
 // Primitives
 
@@ -53,21 +67,11 @@ export function slice(startPos: number, endPos = p): string {
   return input.substring(startPos, endPos)
 }
 
-// Getters
-
-export function pos(): number {
-  return p
-}
-
-export function chr(): string {
-  return c
-}
-
 // Generic
 
 export function isStr(s: string, offset = 0): boolean {
   if (!hasNext(offset + s.length)) return false
-  for (let i = 0; i < s.length; i++) if (s[i] !== peek(offset + i)) return false
+  for (let i = 0; i < s.length; ++i) if (s[i] !== peek(offset + i)) return false
   return true
 }
 
@@ -83,12 +87,12 @@ export function escapedOneOf(chrs: string): boolean {
 
 // Checkers
 
-export function isNewline(offset = 0): boolean {
+export function isNewLine(offset = 0): boolean {
   return peek(offset) === "\n" || isStr("\r\n", offset)
 }
 
 export function isLineEnd(offset = 0): boolean {
-  return hasEnded(offset) || isNewline(offset)
+  return hasEnded(offset) || isNewLine(offset)
 }
 
 export function isSpaceOrLineEnd(offset = 0): boolean {
@@ -98,7 +102,7 @@ export function isSpaceOrLineEnd(offset = 0): boolean {
 // Consumers
 
 export function consumeWhitespace(): void {
-  while (hasNext() && !isNewline() && c!.trim() === "") next()
+  while (hasNext() && !isNewLine() && !c!.trim()) next()
 }
 
 // Helpers
@@ -113,10 +117,16 @@ export function sliceLineEnd(startPos: number): string | null {
   return text || null
 }
 
-function parseIndent(maxLevel: number): number {
-  let level = 0
-  while (level < maxLevel && matchStr("  ")) level++
-  return level
+function updateEmptyState(emptyState: EmptyState | null, newLinePos: number, newLine: string): EmptyState {
+  if (emptyState !== null) {
+    emptyState.newLines += newLine
+  } else {
+    emptyState = {
+      startPos: newLinePos,
+      newLines: newLine,
+    }
+  }
+  return emptyState
 }
 
 // Matchers
@@ -159,6 +169,13 @@ function matchIndent(level: number): boolean {
   return cond
 }
 
+function matchNewLineIndent(level: number): boolean {
+  const startPos = pos()
+  const cond = matchNewLine() && parseIndent(level) === level
+  if (!cond) backtrack(startPos)
+  return cond
+}
+
 // Asserts
 
 export function assertNewLine(): void {
@@ -167,11 +184,17 @@ export function assertNewLine(): void {
 
 // Parsers
 
+function parseIndent(maxLevel: number): number {
+  let level = 0
+  while (level < maxLevel && matchStr("  ")) ++level
+  return level
+}
+
 function parseBraceText(): string | null {
   let text = ""
   let startPos = pos()
   while (hasNext() && !isOneOf("{}")) {
-    if (isNewline()) {
+    if (isNewLine()) {
       text += sliceLineEnd(startPos) || ""
       startPos = pos()
       assertNewLine()
@@ -193,14 +216,14 @@ function parseBraceLiteralText(): string | null {
   let startPos = pos()
   let unbalanced = 0
   while (hasNext() && !(chr() === "}" && unbalanced === 0)) {
-    if (isNewline()) {
+    if (isNewLine()) {
       text += sliceLineEnd(startPos) || ""
       startPos = pos()
       assertNewLine()
       continue
     }
-    if (chr() === "{") unbalanced++
-    else if (chr() === "}") unbalanced--
+    if (chr() === "{") ++unbalanced
+    else if (chr() === "}") --unbalanced
     next()
   }
   text += slice(startPos)
@@ -208,12 +231,10 @@ function parseBraceLiteralText(): string | null {
 }
 
 function parseLineText(): string | null {
-  if (checkIndentContentsEscape && isStr("\\:")) {
-    next() // delete "\\"
-  }
   let text = ""
+  if (checkIndentContentsEscape && isStr("\\:")) next() // delete "\\"
   let startPos = pos()
-  while (hasNext() && !(isOneOf("{}") || isNewline())) {
+  while (hasNext() && !(isOneOf("{}") || isNewLine())) {
     if (escapedOneOf("{}")) {
       text += slice(startPos)
       next() // delete "\\"
@@ -245,13 +266,7 @@ function parseIndentLiteralText(): string | null {
       if (matchIndent(indentLevel)) {
         content = newLine
       } else if (matchEmptyLine()) {
-        if (emptyState !== null) emptyState.newLines += newLine
-        else {
-          emptyState = {
-            startPos: newLinePos,
-            newLines: newLine,
-          }
-        }
+        emptyState = updateEmptyState(emptyState, newLinePos, newLine)
         continue
       } else {
         backtrack(newLinePos)
@@ -259,7 +274,7 @@ function parseIndentLiteralText(): string | null {
       }
     }
     // There were empty lines in between the last and the current content.
-    if (emptyState !== null) {
+    if (emptyState) {
       text += emptyState.newLines
       emptyState = null
     }
@@ -267,9 +282,7 @@ function parseIndentLiteralText(): string | null {
   }
   // The last empty lines did not occur in between indented contents,
   // so they are not considered part of the contents.
-  if (emptyState !== null) {
-    backtrack(emptyState.startPos)
-  }
+  if (emptyState) backtrack(emptyState.startPos)
   return text || null
 }
 
@@ -305,7 +318,7 @@ function parseTagName(): string | null {
   // or the end of the tag, or when a colon occurs, signifying the start of the contents.
   let linePos: number | null = null
   while (hasNext() && !isOneOf("{}:")) {
-    if (isNewline()) return null
+    if (isNewLine()) return null
     if (escapedOneOf("{}:")) {
       name += slice(startPos)
       next() // delete "\\"
@@ -333,21 +346,36 @@ function parseTagName(): string | null {
   return name || null
 }
 
+function parseBlockAttributes(): Tag[] {
+  const blockAttributes: Tag[] = []
+  let startPos = pos()
+  while (matchNewLineIndent(indentLevel)) {
+    const attr = parseTag(ParseTagScope.BlockAttr)
+    if (!attr) break
+    consumeWhitespace()
+    if (!isLineEnd()) break
+    blockAttributes.push(attr)
+    startPos = pos()
+  }
+  backtrack(startPos)
+  return blockAttributes
+}
+
 function tryParseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag | null {
   if (!matchChr("{")) return null
   const isQuoted = matchChr("'")
   const isAttribute = matchChr("@")
   if (!isAttribute && (scope === ParseTagScope.InlineAttr || scope === ParseTagScope.BlockAttr)) return null
   const name = parseTagName()
-  if (!(name !== null)) return null
+  if (!name) return null
   const attributes: Tag[] = []
   while (chr() === "{") {
     const attr = parseTag(ParseTagScope.InlineAttr)
-    if (!(attr !== null)) return null
+    if (!attr) return null
     attributes.push(attr)
   }
-  let isLiteral = false
   let variant: number
+  let isLiteral = false
   let contents: Content[] | undefined
   if (matchChr("}")) {
     variant = ContentsLayout.Atom
@@ -363,9 +391,9 @@ function tryParseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag
     isLiteral = matchChr("'")
     if (variant === ContentsLayout.Brace) {
       if (chr() === " ") next()
-      unbraced++
+      ++unbraced
       contents = isLiteral ? [parseBraceLiteralText() || ""] : parseBraceContents()
-      unbraced--
+      --unbraced
       if (!matchChr("}")) return null
     } else {
       if (!(scope === ParseTagScope.BlockAttr || scope === ParseTagScope.Content)) return null
@@ -373,35 +401,27 @@ function tryParseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag
       if (chr() === " ") next()
       contents = isLiteral ? [parseLineLiteralText() || ""] : parseLineContents()
       const newLinePos = pos()
-      if (contents[0] === "" && matchNewLine()) {
-        indentLevel++
-        const blockAttributes: Tag[] = []
-        ;(() => {
-          let attrNewLinePos: number | undefined
-          while (matchIndent(indentLevel)) {
-            const attr = parseTag(ParseTagScope.BlockAttr)
-            if (attr === null) return
-            consumeWhitespace()
-            attrNewLinePos = pos()
-            if (!matchLineEnd()) return
-            blockAttributes.push(attr)
-          }
-          if (matchIndent(indentLevel - 1) && chr() === ":" && isSpaceOrLineEnd(1)) {
+      if (contents[0] === "" && isNewLine()) {
+        ++indentLevel
+        const blockAttributes = parseBlockAttributes()
+        const lineEndPos = pos()
+        const hasIndentContents = matchNewLineIndent(indentLevel - 1) && chr() === ":" && isSpaceOrLineEnd(1)
+        if (hasIndentContents || blockAttributes.length > 0) {
+          if (hasIndentContents) {
             next()
             if (chr() === " ") next()
             dedentLevel = null
             dedents = 0
-            contents = isLiteral ? [parseIndentLiteralText() || ""] : parseIndentContents()
-          } else if (blockAttributes.length > 0) {
-            contents = []
-            assert(attrNewLinePos !== undefined, "expected attribute new line position to be defined")
-            backtrack(attrNewLinePos) // After the contents should be a newline.
-          } else return
-          variant = ContentsLayout.Indent
+          } else backtrack(lineEndPos)
           attributes.push(...blockAttributes)
-        })()
-        indentLevel--
-        if (variant === ContentsLayout.Line) backtrack(newLinePos)
+          variant = ContentsLayout.Indent
+          contents = hasIndentContents
+            ? isLiteral
+              ? [parseIndentLiteralText() || ""]
+              : parseIndentContents()
+            : []
+        } else backtrack(newLinePos)
+        --indentLevel
       }
       if (variant === ContentsLayout.Line) {
         if (matchNewLine()) {
@@ -421,7 +441,7 @@ function tryParseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag
           dedentLevel = null
           dedents = 0
         } else if (dedents > 0) {
-          dedents--
+          --dedents
         } else {
           const newLinePos = pos()
           assertNewLine()
@@ -439,7 +459,7 @@ function tryParseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag
     }
   }
   checkIndentContentsEscape =
-    variant === ContentsLayout.Indent && scope === ParseTagScope.Content && contents.length === 0
+    scope === ParseTagScope.Content && variant === ContentsLayout.Indent && contents.length === 0
   return {
     isQuoted,
     isAttribute,
@@ -453,10 +473,7 @@ function tryParseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag
 export function parseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag | null {
   const startPos = pos()
   const tag = tryParseTag(scope, contentsLayout)
-  if (tag === null) {
-    backtrack(startPos)
-    return null
-  }
+  if (!tag) backtrack(startPos)
   return tag
 }
 
@@ -470,7 +487,6 @@ function appendText(contents: Content[], text: string): void {
 }
 
 function appendContent(contentsLayout: ContentsLayout, contents: Content[], content: Content): void {
-  if (contents[contents.length - 1] === "") contents.pop()
   if (typeof content === "string") {
     appendText(contents, content)
   } else {
@@ -494,7 +510,7 @@ const genericContentsParser = (parseText: () => string | null, parseDelims: () =
     let content: Content | null = parseText()
     if (content === null) {
       content = parseTag(ParseTagScope.Content, contentsLayout)
-      if (content === null) {
+      if (!content) {
         content = parseDelims()
       }
     }
@@ -511,7 +527,7 @@ const indentContentsParser = () => (contentsLayout: ContentsLayout): Content[] =
     let content: Content | null = parseLineText()
     if (content === null) {
       content = parseTag(ParseTagScope.Content, contentsLayout)
-      if (content === null) {
+      if (!content) {
         content = parseBraceDelims()
         const newLinePos = pos()
         if (matchNewLine()) {
@@ -522,24 +538,16 @@ const indentContentsParser = () => (contentsLayout: ContentsLayout): Content[] =
             if (skipNewLine) skipNewLine = false
             else if (hasIndent) content += newLine
             else {
-              if (emptyState !== null) emptyState.newLines += newLine
-              else {
-                emptyState = {
-                  startPos: newLinePos,
-                  newLines: newLine,
-                }
-              }
+              emptyState = updateEmptyState(emptyState, newLinePos, newLine)
               continue
             }
           } else backtrack(newLinePos)
         }
       }
     }
-    if (content === null) {
-      break
-    }
+    if (content === null) break
     // There were empty lines in between the last and the current content.
-    if (emptyState !== null) {
+    if (emptyState) {
       appendText(contents, emptyState.newLines)
       emptyState = null
     }
@@ -547,7 +555,7 @@ const indentContentsParser = () => (contentsLayout: ContentsLayout): Content[] =
   }
   // The last empty lines did not occur in between indented contents,
   // so they are not considered part of the contents.
-  if (emptyState !== null) backtrack(emptyState.startPos)
+  if (emptyState) backtrack(emptyState.startPos)
   return contents
 }
 

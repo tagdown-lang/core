@@ -1,6 +1,8 @@
 import { Content, ContentsLayout, Tag } from "./types"
 import { assert } from "./utils"
 
+// Types
+
 export interface PrintTag extends Tag {
   attributes: PrintTag[]
   contents: PrintContent[]
@@ -43,7 +45,7 @@ export function prepareTag(tag: Tag): PrintTag {
 }
 
 export function prepareContents(contents: Content[]): PrintContent[] {
-  return contents.map(content => (typeof content !== "string" ? prepareTag(content) : content))
+  return contents.map(content => (typeof content === "string" ? content : prepareTag(content)))
 }
 
 // Layout
@@ -91,12 +93,12 @@ export function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
     let unbalancedRight = 0
     for (const chr of contents[0] as string) {
       if (chr === "{") {
-        unbalancedLeft++
+        ++unbalancedLeft
       } else if (chr === "}") {
         if (unbalancedLeft > 0) {
-          unbalancedLeft--
+          --unbalancedLeft
         } else {
-          unbalancedRight++
+          ++unbalancedRight
         }
       }
     }
@@ -136,34 +138,33 @@ export function assertContents(contents: PrintContent[]): void {
   for (const content of contents) {
     if (typeof content === "string") {
       assert(!isPrevText, "contents must have no consecutive texts")
-      isPrevText = true
     } else {
       assertTag(content)
-      isPrevText = false
     }
+    isPrevText = typeof content === "string"
   }
 }
 
 // Escape
 
-function escapeEmptyLines(lines: string, isLastContent: boolean, tag?: PrintTag, prevTag?: PrintTag): string {
-  const parts = lines.split(/(\r?\n)/)
-  let text = ""
-  for (let i = 0; i < parts.length; i++) {
-    let part = parts[i]
-    if (i % 2 === 0 && (i + 1 !== parts.length || (isLastContent && (!tag || !isInlineTag(tag))))) {
+function escapeEmptyLines(text: string, isLastContent: boolean, tag?: PrintTag, prevTag?: PrintTag): string {
+  let newText = ""
+  const substrings = text.split(/(\r?\n)/)
+  for (let i = 0; i < substrings.length; ++i) {
+    let substring = substrings[i]
+    if (i % 2 === 0 && (i + 1 !== substrings.length || (isLastContent && (!tag || !isInlineTag(tag))))) {
       if (
-        part.trimEnd() !== part ||
-        (part === "" && (parts.length > 1 || (prevTag && !isInlineTag(prevTag))))
+        substring.trimEnd() !== substring ||
+        (substring === "" && (substrings.length > 1 || (prevTag && !isInlineTag(prevTag))))
       ) {
-        part += "$"
+        substring += "$"
       } else {
-        part = part.replace(/\$$/, "\\$")
+        substring = substring.replace(/\$$/, "\\$")
       }
     }
-    text += part
+    newText += substring
   }
-  return text
+  return newText
 }
 
 function escapeTagName(tag: PrintTag): string {
@@ -185,7 +186,7 @@ export function escapeContents(contents: PrintContent[], tag?: PrintTag): void {
     contents[0] = escapeEmptyLines(contents[0] as string, true, tag)
   } else {
     let prevTag: PrintTag | undefined
-    for (let i = 0; i < contents.length; i++) {
+    for (let i = 0; i < contents.length; ++i) {
       let content = contents[i]
       if (typeof content === "string") {
         content = content.replace(/([\\{}])/g, "\\$1")
@@ -234,7 +235,7 @@ export function outputTag(tag: PrintTag, indentLevel: number): string {
 
 export function outputContents(contents: PrintContent[], tag?: PrintTag, indentLevel = 0): string {
   let output = ""
-  for (let i = 0; i < contents.length; i++) {
+  for (let i = 0; i < contents.length; ++i) {
     const content = contents[i]
     if (typeof content === "string") {
       output +=
