@@ -1,4 +1,4 @@
-import { Content, ContentsLayout, Tag } from "./types"
+import { Content, ContentsLayout, isTagContent, isTextContent, Tag } from "./types"
 import { assert } from "./utils"
 
 // Types
@@ -29,8 +29,16 @@ function isIndentTag(tag: PrintTag): boolean {
   return tag.contentsLayout === ContentsLayout.Indent
 }
 
+function isEndTag(tag: PrintTag): boolean {
+  return tag.contentsLayout === ContentsLayout.End
+}
+
 function isInlineTag(tag: PrintTag): boolean {
   return isAtomTag(tag) || isBraceTag(tag)
+}
+
+function isLinesTag(tag: PrintTag): boolean {
+  return isIndentTag(tag) || isEndTag(tag)
 }
 
 // Prepare
@@ -45,17 +53,16 @@ function prepareTag(tag: Tag): PrintTag {
 }
 
 function prepareContents(contents: Content[]): PrintContent[] {
-  return contents.map(content => (typeof content === "string" ? content : prepareTag(content)))
+  return contents.map(content => (isTextContent(content) ? content : prepareTag(content)))
 }
 
 // Layout
 
-function layoutTag(tag: PrintTag, parentTag?: PrintTag): void {
-  for (const attr of tag.attributes) layoutTag(attr, tag)
-  layoutContents(tag.contents, tag)
+function layoutTag(tag: PrintTag): void {
+  for (const attr of tag.attributes) layoutTag(attr)
   if (tag.attributes.length > 2) {
     tag.contentsLayout = ContentsLayout.Indent
-  } else if (!isIndentTag(tag)) {
+  } else if (!isLinesTag(tag)) {
     for (const attr of tag.attributes) {
       if (!isInlineTag(attr)) {
         tag.contentsLayout = ContentsLayout.Indent
@@ -63,38 +70,41 @@ function layoutTag(tag: PrintTag, parentTag?: PrintTag): void {
       }
     }
   }
-  if (isIndentTag(tag)) {
+  layoutContents(tag.contents, tag)
+  if (isLinesTag(tag)) {
     for (const attr of tag.attributes) {
       if (isBraceTag(attr)) {
         attr.contentsLayout = ContentsLayout.Line
       }
     }
   }
-  if (parentTag && isBraceTag(parentTag) && !isInlineTag(tag)) {
-    parentTag.contentsLayout = ContentsLayout.Indent
-  }
 }
 
 function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
-  for (const content of contents) if (typeof content !== "string") layoutTag(content)
-  if (!tag || isIndentTag(tag)) return
-  let hasLineTag = false
+  if (contents.length === 0) return
+  for (const content of contents) if (isTagContent(content)) layoutTag(content)
+  const lastContent = contents[contents.length - 1]
+  if (isTagContent(lastContent) && isIndentTag(lastContent)) {
+    lastContent.contentsLayout = ContentsLayout.End
+  }
+  if (!tag || isLinesTag(tag)) return
+  let isPrevLineTag = false
   for (const content of contents) {
-    if (hasLineTag || (typeof content !== "string" ? isIndentTag(content) : /\r?\n/.test(content))) {
+    if (isPrevLineTag || (isTagContent(content) ? isLinesTag(content) : /\r?\n/.test(content))) {
       tag.contentsLayout = ContentsLayout.Indent
       return
     }
-    if (typeof content !== "string" && isLineTag(content)) {
-      hasLineTag = true
+    if (isTagContent(content) && isLineTag(content)) {
+      isPrevLineTag = true
     }
   }
-  if (tag.isLiteral) {
+  if (tag.isLiteral && isBraceTag(tag)) {
     let unbalancedLeft = 0
     let unbalancedRight = 0
-    for (const chr of contents[0] as string) {
-      if (chr === "{") {
+    for (const c of contents[0] as string) {
+      if (c === "{") {
         ++unbalancedLeft
-      } else if (chr === "}") {
+      } else if (c === "}") {
         if (unbalancedLeft > 0) {
           --unbalancedLeft
         } else {
@@ -121,7 +131,7 @@ function assertTag(tag: PrintTag): void {
   } else {
     assert(
       tag.attributes.length > 0 || tag.contents.length > 0,
-      "indent tags must have either attributes or contents",
+      "indent or end tags must have either attributes or contents",
     )
   }
   assert(
@@ -132,7 +142,7 @@ function assertTag(tag: PrintTag): void {
   if (tag.isLiteral) {
     assert(!isAtomTag(tag), "literals must not be atom tags")
     assert(
-      tag.contents.length === 1 && typeof tag.contents[0] === "string",
+      tag.contents.length === 1 && isTextContent(tag.contents[0]),
       "literals must have a single text as contents",
     )
   }
@@ -142,12 +152,12 @@ function assertTag(tag: PrintTag): void {
 function assertContents(contents: PrintContent[]): void {
   let isPrevText = false
   for (const content of contents) {
-    if (typeof content === "string") {
+    if (isTextContent(content)) {
       assert(!isPrevText, "contents must have no consecutive texts")
     } else {
       assertTag(content)
     }
-    isPrevText = typeof content === "string"
+    isPrevText = isTextContent(content)
   }
 }
 
@@ -194,9 +204,14 @@ function escapeContents(contents: PrintContent[], tag?: PrintTag): void {
     let prevTag: PrintTag | undefined
     for (let i = 0; i < contents.length; ++i) {
       let content = contents[i]
-      if (typeof content === "string") {
+      if (isTextContent(content)) {
         content = content.replace(/([\\{}])/g, "\\$1")
-        if (content[0] === ":" && prevTag && isIndentTag(prevTag) && prevTag.contents.length === 0) {
+        if (
+          prevTag &&
+          prevTag.contents.length === 0 &&
+          ((isIndentTag(prevTag) && content[0] === ":") ||
+            (isEndTag(prevTag) && content.substring(0, 2) === "::"))
+        ) {
           content = "\\" + content
         }
         contents[i] = escapeEmptyLines(content, i + 1 === contents.length, tag, prevTag)
@@ -216,7 +231,7 @@ function outputTag(tag: PrintTag, indentLevel: number): string {
   if (tag.isAttribute) output += "@"
   output += tag.name
   const attrOutputs = tag.attributes.map(attr => outputTag(attr, indentLevel + 1))
-  if (!isIndentTag(tag)) {
+  if (!isLinesTag(tag)) {
     output += attrOutputs.join("")
   }
   if (!isAtomTag(tag)) {
@@ -229,11 +244,14 @@ function outputTag(tag: PrintTag, indentLevel: number): string {
   output += "}"
   if (isLineTag(tag)) {
     output += " " + outputContents(tag.contents, tag, indentLevel)
-  } else if (isIndentTag(tag)) {
+  } else if (isLinesTag(tag)) {
     const newLineIndent = "\n" + "  ".repeat(indentLevel)
     output += attrOutputs.map(output => newLineIndent + "  " + output).join("")
     if (tag.contents.length > 0) {
-      output += newLineIndent + ": " + outputContents(tag.contents, tag, indentLevel + 1)
+      output +=
+        newLineIndent +
+        (isIndentTag(tag) ? ": " : "::" + newLineIndent) +
+        outputContents(tag.contents, tag, isIndentTag(tag) ? indentLevel + 1 : indentLevel)
     }
   }
   return output
@@ -243,14 +261,14 @@ function outputContents(contents: PrintContent[], tag?: PrintTag, indentLevel = 
   let output = ""
   for (let i = 0; i < contents.length; ++i) {
     const content = contents[i]
-    if (typeof content === "string") {
+    if (isTextContent(content)) {
       output +=
-        tag && isIndentTag(tag) ? content.replace(/(\r?\n)/g, "$1" + "  ".repeat(indentLevel)) : content
+        tag && isLinesTag(tag) ? content.replace(/(\r?\n)/g, "$1" + "  ".repeat(indentLevel)) : content
     } else {
       output += outputTag(content, indentLevel)
       if (!isInlineTag(content) && (i + 1 < contents.length || (tag && isBraceTag(tag)))) {
         output += "\n"
-        if (tag && isIndentTag(tag)) {
+        if (tag && isLinesTag(tag)) {
           output += "  ".repeat(indentLevel)
         }
       }

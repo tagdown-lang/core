@@ -43,6 +43,7 @@ export enum ContentsLayout {
   Brace = 1 << 1, // {name: text}
   Line = 1 << 2, // {name=} text
   Indent = 1 << 3, // {name=}\n: text
+  End = 1 << 4, // {name=}\n::\ntext
 }
 
 // Check
@@ -71,4 +72,12 @@ export function isContent(arg: any): arg is Content {
 
 export function isContents(arg: any): arg is Content[] {
   return Array.isArray(arg) && arg.every(isContent)
+}
+
+export function isTextContent(content: Content): content is string {
+  return isText(content)
+}
+
+export function isTagContent(content: Content): content is Tag {
+  return isObject(content)
 }

@@ -1,12 +1,21 @@
 import * as parser from "./parser"
 import { printContents } from "./printer"
-import * as tagdown from "./tagdown"
 import { Content, Tag } from "./types"
 import { log } from "./utils"
 
 // Types
 
-export { Content, ContentsLayout, Tag, isContent, isContents, isTag } from "./types"
+export {
+  Content,
+  ContentsLayout,
+  isContent,
+  isContents,
+  isTag,
+  isTagContent,
+  isText,
+  isTextContent,
+  Tag,
+} from "./types"
 
 // Parser
 
@@ -41,8 +50,3 @@ export function logPrint(input: string | Content[] | Tag): string {
   logParse(output)
   return output
 }
-
-// Tagdown
-
-export const parseTagdown = (name: string) => parser.wrapTopLevelParser(() => tagdown.parseTagdown(name))
-export { printTagdown } from "./tagdown"

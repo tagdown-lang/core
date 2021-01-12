@@ -1,4 +1,4 @@
-import { Content, ContentsLayout, Tag } from "./types"
+import { Content, ContentsLayout, isTextContent, Tag } from "./types"
 import { assert } from "./utils"
 
 // Types
@@ -349,6 +349,7 @@ function parseTagName(): string | null {
 function parseBlockAttributes(): Tag[] {
   const blockAttributes: Tag[] = []
   let startPos = pos()
+  ++indentLevel
   while (matchNewLineIndent(indentLevel)) {
     const attr = parseTag(ParseTagScope.BlockAttr)
     if (!attr) break
@@ -357,6 +358,7 @@ function parseBlockAttributes(): Tag[] {
     blockAttributes.push(attr)
     startPos = pos()
   }
+  --indentLevel
   backtrack(startPos)
   return blockAttributes
 }
@@ -402,26 +404,33 @@ function tryParseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag
       contents = isLiteral ? [parseLineLiteralText() || ""] : parseLineContents()
       const newLinePos = pos()
       if (contents[0] === "" && isNewLine()) {
-        ++indentLevel
         const blockAttributes = parseBlockAttributes()
         const lineEndPos = pos()
-        const hasIndentContents = matchNewLineIndent(indentLevel - 1) && chr() === ":" && isSpaceOrLineEnd(1)
-        if (hasIndentContents || blockAttributes.length > 0) {
-          if (hasIndentContents) {
-            next()
-            if (chr() === " ") next()
+        const hasContents =
+          matchNewLineIndent(indentLevel) &&
+          ((chr() === ":" && isSpaceOrLineEnd(1)) || (isStr("::") && isLineEnd(2)))
+        if (hasContents || blockAttributes.length > 0) {
+          attributes.push(...blockAttributes)
+          variant = isStr("::") ? ContentsLayout.End : ContentsLayout.Indent
+          if (hasContents) {
+            if (variant === ContentsLayout.Indent) {
+              next()
+              if (chr() === " ") next()
+            } else {
+              next(2)
+              assert(matchNewLineIndent(indentLevel) || matchLineEnd(), "expected line end")
+            }
             dedentLevel = null
             dedents = 0
           } else backtrack(lineEndPos)
-          attributes.push(...blockAttributes)
-          variant = ContentsLayout.Indent
-          contents = hasIndentContents
-            ? isLiteral
-              ? [parseIndentLiteralText() || ""]
-              : parseIndentContents()
-            : []
+          if (hasContents) {
+            if (variant === ContentsLayout.Indent) ++indentLevel
+            contents = isLiteral ? [parseIndentLiteralText() || ""] : parseIndentContents()
+            if (variant === ContentsLayout.Indent) --indentLevel
+          } else {
+            contents = []
+          }
         } else backtrack(newLinePos)
-        --indentLevel
       }
       if (variant === ContentsLayout.Line) {
         if (matchNewLine()) {
@@ -479,15 +488,15 @@ export function parseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout):
 
 function appendText(contents: Content[], text: string): void {
   const lastIndex = contents.length - 1
-  if (typeof contents[lastIndex] === "string") {
+  if (isTextContent(contents[lastIndex])) {
     contents[lastIndex] += text
   } else {
     contents.push(text)
   }
 }
 
-function appendContent(contentsLayout: ContentsLayout, contents: Content[], content: Content): void {
-  if (typeof content === "string") {
+function appendContent(contents: Content[], content: Content): void {
+  if (isTextContent(content)) {
     appendText(contents, content)
   } else {
     contents.push(content)
@@ -497,7 +506,6 @@ function appendContent(contentsLayout: ContentsLayout, contents: Content[], cont
       skipNewLine = false
       assertNewLine()
       assert(matchIndent(indentLevel), "expected indentation")
-      if (contentsLayout & ContentsLayout.Indent) appendText(contents, "")
     }
   }
 }
@@ -515,7 +523,7 @@ const genericContentsParser = (parseText: () => string | null, parseDelims: () =
       }
     }
     if (content === null) break
-    appendContent(contentsLayout, contents, content)
+    appendContent(contents, content)
   }
   return contents
 }
@@ -551,7 +559,7 @@ const indentContentsParser = () => (contentsLayout: ContentsLayout): Content[] =
       appendText(contents, emptyState.newLines)
       emptyState = null
     }
-    appendContent(contentsLayout, contents, content)
+    appendContent(contents, content)
   }
   // The last empty lines did not occur in between indented contents,
   // so they are not considered part of the contents.
