@@ -1,9 +1,12 @@
 import * as parser from "./parser"
-import { assertContents, escapeContents, layoutContents, outputContents, prepareContents } from "./printer"
+import { printContents } from "./printer"
+import * as tagdown from "./tagdown"
 import { Content, Tag } from "./types"
 import { log } from "./utils"
 
-export { Content, ContentsLayout, Tag } from "./types"
+// Types
+
+export { Content, ContentsLayout, Tag, isContent, isContents, isTag } from "./types"
 
 // Parser
 
@@ -20,13 +23,7 @@ export function logParse(input: string): Content[] {
 
 // Printer
 
-export function printContents(contents: Content[]): string {
-  const preparedContents = prepareContents(contents)
-  layoutContents(preparedContents)
-  assertContents(preparedContents)
-  escapeContents(preparedContents)
-  return outputContents(preparedContents)
-}
+export { printTag, printContents } from "./printer"
 
 export function logPrint(input: string | Content[] | Tag): string {
   let contents: Content[]
@@ -44,3 +41,8 @@ export function logPrint(input: string | Content[] | Tag): string {
   logParse(output)
   return output
 }
+
+// Tagdown
+
+export const parseTagdown = (name: string) => parser.wrapTopLevelParser(() => tagdown.parseTagdown(name))
+export { printTagdown } from "./tagdown"

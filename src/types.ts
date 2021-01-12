@@ -1,3 +1,7 @@
+import { isObject } from "./utils"
+
+// Types
+
 // The tag represents structure within the language,
 // allowing reuse and things like widgets to exist within the text.
 export type Tag = {
@@ -39,4 +43,32 @@ export enum ContentsLayout {
   Brace = 1 << 1, // {name: text}
   Line = 1 << 2, // {name=} text
   Indent = 1 << 3, // {name=}\n: text
+}
+
+// Check
+
+export function isText(arg: any): arg is string {
+  return typeof arg === "string"
+}
+
+export function isTag(arg: any): arg is Tag {
+  return (
+    isObject(arg) &&
+    typeof arg.isQuoted === "boolean" &&
+    typeof arg.isAttribute === "boolean" &&
+    typeof arg.name === "string" &&
+    Array.isArray(arg.attributes) &&
+    arg.attributes.every(isTag) &&
+    typeof arg.isLiteral === "boolean" &&
+    Array.isArray(arg.contents) &&
+    arg.contents.every(isContent)
+  )
+}
+
+export function isContent(arg: any): arg is Content {
+  return isText(arg) || isTag(arg)
+}
+
+export function isContents(arg: any): arg is Content[] {
+  return Array.isArray(arg) && arg.every(isContent)
 }

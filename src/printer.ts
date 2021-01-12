@@ -3,39 +3,39 @@ import { assert } from "./utils"
 
 // Types
 
-export interface PrintTag extends Tag {
+interface PrintTag extends Tag {
   attributes: PrintTag[]
   contents: PrintContent[]
   contentsLayout: ContentsLayout
 }
 
-export type PrintContent = string | PrintTag
+type PrintContent = string | PrintTag
 
 // Check
 
-export function isAtomTag(tag: PrintTag): boolean {
+function isAtomTag(tag: PrintTag): boolean {
   return tag.contentsLayout === ContentsLayout.Atom
 }
 
-export function isBraceTag(tag: PrintTag): boolean {
+function isBraceTag(tag: PrintTag): boolean {
   return tag.contentsLayout === ContentsLayout.Brace
 }
 
-export function isLineTag(tag: PrintTag): boolean {
+function isLineTag(tag: PrintTag): boolean {
   return tag.contentsLayout === ContentsLayout.Line
 }
 
-export function isIndentTag(tag: PrintTag): boolean {
+function isIndentTag(tag: PrintTag): boolean {
   return tag.contentsLayout === ContentsLayout.Indent
 }
 
-export function isInlineTag(tag: PrintTag): boolean {
+function isInlineTag(tag: PrintTag): boolean {
   return isAtomTag(tag) || isBraceTag(tag)
 }
 
 // Prepare
 
-export function prepareTag(tag: Tag): PrintTag {
+function prepareTag(tag: Tag): PrintTag {
   return {
     ...tag,
     attributes: tag.attributes.map(prepareTag),
@@ -44,13 +44,13 @@ export function prepareTag(tag: Tag): PrintTag {
   }
 }
 
-export function prepareContents(contents: Content[]): PrintContent[] {
+function prepareContents(contents: Content[]): PrintContent[] {
   return contents.map(content => (typeof content === "string" ? content : prepareTag(content)))
 }
 
 // Layout
 
-export function layoutTag(tag: PrintTag, parentTag?: PrintTag): void {
+function layoutTag(tag: PrintTag, parentTag?: PrintTag): void {
   for (const attr of tag.attributes) layoutTag(attr, tag)
   layoutContents(tag.contents, tag)
   if (tag.attributes.length > 2) {
@@ -75,7 +75,7 @@ export function layoutTag(tag: PrintTag, parentTag?: PrintTag): void {
   }
 }
 
-export function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
+function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
   for (const content of contents) if (typeof content !== "string") layoutTag(content)
   if (!tag || isIndentTag(tag)) return
   let hasLineTag = false
@@ -110,7 +110,7 @@ export function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
 
 // Assert
 
-export function assertTag(tag: PrintTag) {
+function assertTag(tag: PrintTag): void {
   assert(!/\r?\n/.test(tag.name), "newlines are disallowed in tag names")
   if (isAtomTag(tag)) {
     assert(tag.contents.length === 0, "atom tags must have no contents")
@@ -124,6 +124,11 @@ export function assertTag(tag: PrintTag) {
       "indent tags must have either attributes or contents",
     )
   }
+  assert(
+    tag.attributes.every(attr => attr.isAttribute),
+    "attributes must be marked as such",
+  )
+  tag.attributes.forEach(assertTag)
   if (tag.isLiteral) {
     assert(!isAtomTag(tag), "literals must not be atom tags")
     assert(
@@ -131,9 +136,10 @@ export function assertTag(tag: PrintTag) {
       "literals must have a single text as contents",
     )
   }
+  assertContents(tag.contents)
 }
 
-export function assertContents(contents: PrintContent[]): void {
+function assertContents(contents: PrintContent[]): void {
   let isPrevText = false
   for (const content of contents) {
     if (typeof content === "string") {
@@ -175,13 +181,13 @@ function escapeTagName(tag: PrintTag): string {
   return name
 }
 
-export function escapeTag(tag: PrintTag): void {
+function escapeTag(tag: PrintTag): void {
   tag.name = escapeTagName(tag)
   for (const attr of tag.attributes) escapeTag(attr)
   escapeContents(tag.contents, tag)
 }
 
-export function escapeContents(contents: PrintContent[], tag?: PrintTag): void {
+function escapeContents(contents: PrintContent[], tag?: PrintTag): void {
   if (tag && tag.isLiteral) {
     contents[0] = escapeEmptyLines(contents[0] as string, true, tag)
   } else {
@@ -204,7 +210,7 @@ export function escapeContents(contents: PrintContent[], tag?: PrintTag): void {
 
 // Output
 
-export function outputTag(tag: PrintTag, indentLevel: number): string {
+function outputTag(tag: PrintTag, indentLevel: number): string {
   let output = "{"
   if (tag.isQuoted) output += "'"
   if (tag.isAttribute) output += "@"
@@ -233,7 +239,7 @@ export function outputTag(tag: PrintTag, indentLevel: number): string {
   return output
 }
 
-export function outputContents(contents: PrintContent[], tag?: PrintTag, indentLevel = 0): string {
+function outputContents(contents: PrintContent[], tag?: PrintTag, indentLevel = 0): string {
   let output = ""
   for (let i = 0; i < contents.length; ++i) {
     const content = contents[i]
@@ -251,4 +257,22 @@ export function outputContents(contents: PrintContent[], tag?: PrintTag, indentL
     }
   }
   return output
+}
+
+// Print
+
+export function printContents(contents: Content[]): string {
+  const preparedContents = prepareContents(contents)
+  layoutContents(preparedContents)
+  assertContents(preparedContents)
+  escapeContents(preparedContents)
+  return outputContents(preparedContents)
+}
+
+export function printTag(tag: Tag): string {
+  const preparedTag = prepareTag(tag)
+  layoutTag(preparedTag)
+  assertTag(preparedTag)
+  escapeTag(preparedTag)
+  return outputTag(preparedTag, 0)
 }

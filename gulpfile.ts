@@ -23,7 +23,7 @@ gulp.task("compile", () =>
     .src(`${src}/**/*.ts`, { base: "" })
     .pipe(newer({ dest, ext: ".js" }))
     .pipe(tsp())
-    .js.pipe(gulp.dest(dest)),
+    .pipe(gulp.dest(dest)),
 )
 
 gulp.task("watch", done => {

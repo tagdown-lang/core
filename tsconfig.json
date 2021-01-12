@@ -1,7 +1,15 @@
 {
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "gulpfile.ts"
+  ],
   "compilerOptions": {
     "alwaysStrict": true,
     "baseUrl": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "module": "commonjs",
     "moduleResolution": "node",
     "noImplicitReturns": true,
     "noImplicitThis": true,

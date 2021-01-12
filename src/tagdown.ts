@@ -1,4 +1,3 @@
-import { printContents } from "."
 import {
   backtrack,
   chr,
@@ -12,7 +11,7 @@ import {
   parseTag,
   ParseTagScope,
 } from "./parser"
-import { assertTag, escapeTag, layoutTag, outputTag, prepareTag } from "./printer"
+import { printContents, printTag } from "./printer"
 import { Tag } from "./types"
 import { assert } from "./utils"
 
@@ -26,18 +25,18 @@ function tryParseBlockAttributes(): Tag[] | null {
     if (!matchNewLine()) return null
     blockAttributes.push(attr)
   }
-  if (!matchStr("---")) return null
+  if (!(matchStr("---") && isLineEnd())) return null
   return blockAttributes
 }
 
-export function parseNode(): Tag {
+export function parseTagdown(name: string): Tag {
   const attributes: Tag[] = []
   let hasContents = true
   if (isStr("\\---")) {
     next() // delete "\\"
   } else {
     const blockAttributes = tryParseBlockAttributes()
-    if (blockAttributes && isLineEnd()) {
+    if (blockAttributes) {
       hasContents = matchNewLine()
       attributes.push(...blockAttributes)
     } else backtrack(0)
@@ -45,28 +44,24 @@ export function parseNode(): Tag {
   return {
     isQuoted: false,
     isAttribute: false,
-    name: "node",
+    name,
     attributes,
     isLiteral: false,
     contents: hasContents ? parseContents() : [],
   }
 }
 
-export function printNode(tag: Tag) {
-  assert(tag.name === "node", "node tags should be named as such")
+export function printTagdown(name: string, tag: Tag) {
+  assert(tag.name === name, `tagdown tag should be named '${name}'`)
   assert(
     !tag.isQuoted && !tag.isAttribute && !tag.isLiteral,
-    "node tags should not be quoted, an attribute, or a literal",
+    "tagdown tags should not be quoted, an attribute, or a literal",
   )
   let output = ""
   if (tag.attributes.length > 0) {
     output = "---\n"
     for (const attr of tag.attributes) {
-      const preparedAttr = prepareTag(attr)
-      layoutTag(preparedAttr)
-      assertTag(preparedAttr)
-      escapeTag(preparedAttr)
-      output += outputTag(preparedAttr, 0) + "\n"
+      output += printTag(attr) + "\n"
     }
     output += "---"
     if (tag.contents.length > 0) output += "\n"

@@ -335,12 +335,12 @@ function parseTagName(): string | null {
     const isEscaped = matchChr("\\")
     assert(matchChr("="), "expected equals sign")
     matchChr("'")
-    if (pos() < endPos) backtrack(endPos)
-    else if (!isEscaped) backtrack(linePos)
-    else {
-      name += slice(startPos, linePos)
-      startPos = linePos + 1 // delete "\\"
-    }
+    if (pos() === endPos) {
+      if (isEscaped) {
+        name += slice(startPos, linePos)
+        startPos = linePos + 1 // delete "\\"
+      } else backtrack(linePos)
+    } else backtrack(endPos)
   }
   name += slice(startPos)
   return name || null

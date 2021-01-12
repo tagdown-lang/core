@@ -1,9 +1,9 @@
 import * as jsc from "jsverify"
 import * as lazyseq from "lazy-seq"
 
-import { logPrint, parseContents, printContents } from "."
-import { Content, Tag } from "./types"
-import { inspect } from "./utils"
+import { logPrint, parseContents, printContents } from "../src"
+import { Content, Tag } from "../src/types"
+import { inspect } from "../src/utils"
 
 const gen = jsc.generator
 const shr = jsc.shrink
