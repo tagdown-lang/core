@@ -34,18 +34,9 @@ export function logParse(input: string): Content[] {
 
 export { printTag, printContents } from "./printer"
 
-export function logPrint(input: string | Content[] | Tag): string {
-  let contents: Content[]
-  if (typeof input === "string") {
-    contents = logParse(input)
-  } else {
-    if (Array.isArray(input)) {
-      contents = input
-    } else {
-      contents = [input]
-    }
-    log(contents)
-  }
+export function logPrint(input: Content[] | Tag): string {
+  let contents = Array.isArray(input) ? input : [input]
+  log(contents)
   const output = printContents(contents)
   logParse(output)
   return output
