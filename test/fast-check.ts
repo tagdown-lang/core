@@ -1,6 +1,7 @@
 import * as fc from "fast-check"
 
-import { Content, logPrint, parseContents, printContents, Tag } from "../src"
+import { Content, parseContents, printContents, Tag } from "../src"
+import { logPrint } from "./log"
 
 function joinTexts(contents: Content[]): Content[] {
   return contents.reduceRight((contents, content) => {
