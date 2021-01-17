@@ -232,7 +232,7 @@ function parseBraceLiteralText(): string | null {
 
 function parseLineText(): string | null {
   let text = ""
-  if (checkIndentContentsEscape && isStr("\\:")) next() // delete "\\"
+  if (checkIndentContentsEscape && (isStr("\\:") || isStr("\\--"))) next() // delete "\\"
   let startPos = pos()
   while (hasNext() && !(isOneOf("{}") || isNewLine())) {
     if (escapedOneOf("{}")) {
@@ -408,10 +408,10 @@ function tryParseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag
         const lineEndPos = pos()
         const hasContents =
           matchNewLineIndent(indentLevel) &&
-          ((chr() === ":" && isSpaceOrLineEnd(1)) || (isStr("::") && isLineEnd(2)))
+          ((chr() === ":" && isSpaceOrLineEnd(1)) || (isStr("--") && isLineEnd(2)))
         if (hasContents || blockAttributes.length > 0) {
           attributes.push(...blockAttributes)
-          variant = isStr("::") ? ContentsLayout.End : ContentsLayout.Indent
+          variant = isStr("--") ? ContentsLayout.End : ContentsLayout.Indent
           if (hasContents) {
             if (variant === ContentsLayout.Indent) {
               next()
@@ -495,7 +495,7 @@ function appendText(contents: Content[], text: string): void {
   }
 }
 
-function appendContent(contents: Content[], content: Content): void {
+function appendContent(contentsLayout: ContentsLayout, contents: Content[], content: Content): void {
   if (isTextContent(content)) {
     appendText(contents, content)
   } else {
@@ -506,6 +506,9 @@ function appendContent(contents: Content[], content: Content): void {
       skipNewLine = false
       assertNewLine()
       assert(matchIndent(indentLevel), "expected indentation")
+      if (contentsLayout & ContentsLayout.Indent) {
+        appendText(contents, "")
+      }
     }
   }
 }
@@ -523,7 +526,7 @@ const genericContentsParser = (parseText: () => string | null, parseDelims: () =
       }
     }
     if (content === null) break
-    appendContent(contents, content)
+    appendContent(contentsLayout, contents, content)
   }
   return contents
 }
@@ -559,7 +562,7 @@ const indentContentsParser = () => (contentsLayout: ContentsLayout): Content[] =
       appendText(contents, emptyState.newLines)
       emptyState = null
     }
-    appendContent(contents, content)
+    appendContent(contentsLayout, contents, content)
   }
   // The last empty lines did not occur in between indented contents,
   // so they are not considered part of the contents.

@@ -43,7 +43,7 @@ export enum ContentsLayout {
   Brace = 1 << 1, // {name: text}
   Line = 1 << 2, // {name=} text
   Indent = 1 << 3, // {name=}\n: text
-  End = 1 << 4, // {name=}\n::\ntext
+  End = 1 << 4, // {name=}\n--\ntext
 }
 
 // Check

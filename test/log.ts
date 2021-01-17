@@ -1,9 +1,9 @@
-import * as util from "util-inspect"
+import * as _inspect from "browser-util-inspect"
 
 import { Content, parseContents, printContents, Tag } from "../src"
 
 export function inspect(arg: any): string {
-  return util.inspect(arg, {
+  return _inspect(arg, {
     depth: null,
     colors: true,
   })
@@ -28,3 +28,9 @@ export function logPrint(input: Content[] | Tag): string {
   logParse(output)
   return output
 }
+
+// Bug!
+// logPrint([
+//   { isQuoted: false, isAttribute: false, name: "a", attributes: [], isLiteral: true, contents: ["{"] },
+//   "",
+// ])

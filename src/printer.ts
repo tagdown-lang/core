@@ -163,22 +163,26 @@ function assertContents(contents: PrintContent[]): void {
 
 // Escape
 
-function escapeEmptyLines(text: string, isLastContent: boolean, tag?: PrintTag, prevTag?: PrintTag): string {
+function escapeEmptyLines(text: string, indentLevel: number, isLastContent: boolean, tag?: PrintTag): string {
   let newText = ""
   const substrings = text.split(/(\r?\n)/)
+  const textEndsWithNewLine = substrings.length % 2 === 0
+  const contentsEndWithNewLine = (!tag || !isInlineTag(tag)) && isLastContent
   for (let i = 0; i < substrings.length; ++i) {
-    let substring = substrings[i]
-    if (i % 2 === 0 && (i + 1 !== substrings.length || (isLastContent && (!tag || !isInlineTag(tag))))) {
-      if (
-        substring.trimEnd() !== substring ||
-        (substring === "" && (substrings.length > 1 || (prevTag && !isInlineTag(prevTag))))
-      ) {
-        substring += "$"
-      } else {
-        substring = substring.replace(/\$$/, "\\$")
+    if (i % 2 === 1) {
+      newText += "\n"
+    } else {
+      let line = substrings[i]
+      const isLastLine = i >= substrings.length - 2
+      if (!isLastLine || textEndsWithNewLine || contentsEndWithNewLine) {
+        if (line.trimEnd() !== line || (line === "" && isLastLine && indentLevel > 0)) {
+          line += "$"
+        } else {
+          line = line.replace(/\$$/, "\\$")
+        }
       }
+      newText += line
     }
-    newText += substring
   }
   return newText
 }
@@ -191,15 +195,15 @@ function escapeTagName(tag: PrintTag): string {
   return name
 }
 
-function escapeTag(tag: PrintTag): void {
+function escapeTag(tag: PrintTag, indentLevel: number): void {
   tag.name = escapeTagName(tag)
-  for (const attr of tag.attributes) escapeTag(attr)
-  escapeContents(tag.contents, tag)
+  for (const attr of tag.attributes) escapeTag(attr, indentLevel)
+  escapeContents(tag.contents, tag, isIndentTag(tag) ? indentLevel + 1 : indentLevel)
 }
 
-function escapeContents(contents: PrintContent[], tag?: PrintTag): void {
+function escapeContents(contents: PrintContent[], tag?: PrintTag, indentLevel = 0): void {
   if (tag && tag.isLiteral) {
-    contents[0] = escapeEmptyLines(contents[0] as string, true, tag)
+    contents[0] = escapeEmptyLines(contents[0] as string, indentLevel, true, tag)
   } else {
     let prevTag: PrintTag | undefined
     for (let i = 0; i < contents.length; ++i) {
@@ -210,13 +214,13 @@ function escapeContents(contents: PrintContent[], tag?: PrintTag): void {
           prevTag &&
           prevTag.contents.length === 0 &&
           ((isIndentTag(prevTag) && content[0] === ":") ||
-            (isEndTag(prevTag) && content.substring(0, 2) === "::"))
+            (isEndTag(prevTag) && content.substring(0, 2) === "--"))
         ) {
           content = "\\" + content
         }
-        contents[i] = escapeEmptyLines(content, i + 1 === contents.length, tag, prevTag)
+        contents[i] = escapeEmptyLines(content, indentLevel, i + 1 === contents.length, tag)
       } else {
-        escapeTag(content)
+        escapeTag(content, indentLevel)
         prevTag = content
       }
     }
@@ -250,7 +254,7 @@ function outputTag(tag: PrintTag, indentLevel: number): string {
     if (tag.contents.length > 0) {
       output +=
         newLineIndent +
-        (isIndentTag(tag) ? ": " : "::" + newLineIndent) +
+        (isIndentTag(tag) ? ": " : "--" + newLineIndent) +
         outputContents(tag.contents, tag, isIndentTag(tag) ? indentLevel + 1 : indentLevel)
     }
   }
@@ -291,6 +295,6 @@ export function printTag(tag: Tag): string {
   const preparedTag = prepareTag(tag)
   layoutTag(preparedTag)
   assertTag(preparedTag)
-  escapeTag(preparedTag)
+  escapeTag(preparedTag, 0)
   return outputTag(preparedTag, 0)
 }
