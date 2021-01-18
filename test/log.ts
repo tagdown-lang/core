@@ -28,9 +28,3 @@ export function logPrint(input: Content[] | Tag): string {
   logParse(output)
   return output
 }
-
-// Bug!
-// logPrint([
-//   { isQuoted: false, isAttribute: false, name: "a", attributes: [], isLiteral: true, contents: ["{"] },
-//   "",
-// ])

@@ -439,7 +439,7 @@ function tryParseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag
           // so it should only be skipped only when it is safe to do so.
           if (scope === ParseTagScope.Content) {
             assert(contentsLayout !== undefined, "expected variant to be defined for content tag")
-            if (!(contentsLayout & ContentsLayout.Brace)) {
+            if (contentsLayout & ContentsLayout.Line || contentsLayout & ContentsLayout.Indent) {
               if (matchIndent(indentLevel)) skipNewLine = true
               backtrack(newLinePos)
             }
