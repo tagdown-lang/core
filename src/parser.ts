@@ -415,7 +415,7 @@ function tryParseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag
           if (hasContents) {
             if (variant === ContentsLayout.Indent) {
               next()
-              if (chr() === " ") next()
+              matchChr(" ")
             } else {
               next(2)
               assert(matchNewLineIndent(indentLevel) || matchLineEnd(), "expected line end")

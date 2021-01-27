@@ -5,7 +5,6 @@
   ],
   "compilerOptions": {
     "alwaysStrict": true,
-    "baseUrl": "src",
     "declaration": true,
     "declarationMap": true,
     "module": "commonjs",

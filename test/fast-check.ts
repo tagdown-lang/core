@@ -26,6 +26,9 @@ const visibleAsciiArb = AlphabetArbitrary(
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~",
 )
 
+const alphaArb = AlphabetArbitrary("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+const alphanumericArb = AlphabetArbitrary("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
 const textArb = fc.stringOf(
   fc.frequency(
     { arbitrary: fc.constant("\\"), weight: 1 },
@@ -37,13 +40,17 @@ const textArb = fc.stringOf(
   ),
 )
 
+const nameArb = fc
+  .tuple(fc.stringOf(alphaArb, { minLength: 1 }), fc.array(fc.stringOf(alphanumericArb, { minLength: 1 })))
+  .map(([s1, ss]) => [s1].concat(ss).join(" "))
+
 const tagArb = (contents: Content[]): fc.Memo<Tag> =>
   fc.memo(n =>
     fc
       .record({
         isQuoted: oneOutOf(10),
         isAttribute: oneOutOf(3),
-        name: fc.stringOf(visibleAsciiArb, { minLength: 1 }),
+        name: nameArb,
         attributes: fc.boolean().chain(b =>
           b && n > 1
             ? fc.array(

@@ -17,7 +17,8 @@ export {
 // Parser
 
 export const parseTag = parser.wrapTopLevelParser(() => parser.parseTag(parser.ParseTagScope.Content))
-export const parseContents = parser.wrapTopLevelParser(parser.parseContents)
+// export const parseContents = parser.wrapTopLevelParser(parser.parseContents)
+export { parseContents } from "./lezer"
 
 // Printer
 
