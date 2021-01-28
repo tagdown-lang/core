@@ -1,8 +1,9 @@
-import { parser, treeToContents } from "../src/lezer"
+import { printContents } from "../src"
+import { parser, parseTreeToContents } from "../src/lezer"
 import { parseContents, wrapTopLevelParser } from "../src/parser"
 import { shakeContents } from "../src/shake"
 import { printTree } from "../src/tree"
-import { log } from "./log"
+import { log, logPrint } from "./log"
 
 // FIXME: Fails to print properly, I think
 // [ { name: 'a',
@@ -20,12 +21,34 @@ import { log } from "./log"
 //     : x
 //       y
 // z`
-// const input = `{a}`
+const inputs = {
+  0: "{a}",
+  1: "{a: x}",
+  2: "{a{b}}",
+  3: "{a{b: x}}",
+  4: "{a}{b}",
+  5: "{a=} x",
+  6: "{a=} \n",
+  7: "{a=}x\n{b=} y",
+  8: "{a=}\n: x",
+  9: "{a=}\n: x\n  y",
+  10: "{a=}\n  {b}",
+  11: "{a=}\n  {@b}\n{c}",
+  12: "{a=}\n  {@b=}\n    {@c=}\n      {@d=} \n    : 5]4\\{:",
+  13: "{a='} }",
+  14: "{a=}\n  {@a=}\n  : {a=}\n    --\n    \n    $\n  {@a=}\n  : \n    $",
+  15: "{a=}\n  {@a}\n  {@a}\n  {@a}\n\\:",
+  16: "{a=}\n  {@b=} :\\$\n--\nx",
+  17: "{a=}\n: \n  $\n",
+  18: "{a=}\n: \n  $\n\n\n",
+}
+
+const input = inputs[17]
 // const input = `{a{@a: {a}}}`
 // const input = `{0}`
 // const input = "{a=}\n  {@a=}\n  : {a=}\n      {@a}\n      {@a}\n      {@a}\n    {a}"
 // const input = "{a=}\n  {@a=}\n  : \n    $\n  {@a}"
-const input = "{a=}\n  {@b=}\n  : {c=}\n      {@x}\n      {@x}\n      {@x}\n    --\n    {y}\n\n"
+// const input = "{a=}\n  {@b=}\n  : {c=}\n      {@x}\n      {@x}\n      {@x}\n    --\n    {y}\n\n"
 // const input =
 //   "{a=}\n  {@b=}\n  : {c=}\n      {@x}\n      {@x}\n      {@x}\n    --\n    \\\\:\\}:j\\{en1\\}*IB\\}:\n: $\n"
 // const input = "{a='} {"
@@ -38,8 +61,15 @@ console.timeEnd()
 console.log(input)
 // log(tree)
 console.log(printTree(tree, input))
-log(shakeContents(treeToContents(tree, input)))
+log(shakeContents(parseTreeToContents(tree, input)))
 log(shakeContents(tree2))
+// console.log(
+//   logPrint([
+//     { isQuoted: false, isAttribute: false, name: "a", attributes: [], isLiteral: false, contents: [] },
+//     "",
+//     { isQuoted: false, isAttribute: false, name: "b", attributes: [], isLiteral: false, contents: [] },
+//   ]),
+// )
 // const input = "fooxbary"
 // const tree = new Tree(
 //   nodeTypes[Type.TopContents],
