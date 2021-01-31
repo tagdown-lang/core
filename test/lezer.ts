@@ -23,7 +23,7 @@ import { log, logPrint } from "./log"
 // z`
 const inputs = {
   0: "{a}",
-  1: "{a: x}",
+  1: "{a: x\\}y\\{z\\}lala}",
   2: "{a{b}}",
   3: "{a{b: x}}",
   4: "{a}{b}",
@@ -41,9 +41,11 @@ const inputs = {
   16: "{a=}\n  {@b=} :\\$\n--\nx",
   17: "{a=}\n: \n  $\n",
   18: "{a=}\n: \n  $\n\n\n",
+  19: "{   a   {a  b",
+  20: "{a{b}:x",
 }
 
-const input = inputs[17]
+const input = inputs[1]
 // const input = `{a{@a: {a}}}`
 // const input = `{0}`
 // const input = "{a=}\n  {@a=}\n  : {a=}\n      {@a}\n      {@a}\n      {@a}\n    {a}"

@@ -1,4 +1,5 @@
 import {
+  ChangedRange,
   Input,
   NodeProp,
   NodePropSource,
@@ -10,10 +11,12 @@ import {
   Tree,
   TreeBuffer,
   TreeCursor,
+  TreeFragment,
 } from "lezer-tree"
+
 import { log } from "../test/log"
+import { printTree } from "./tree"
 import { Content, Tag } from "./types"
-import { assert } from "./utils"
 
 enum Type {
   // Special
@@ -33,13 +36,36 @@ enum Type {
   Flags,
   ContentsMarker,
   TagMarker,
-  Spaces,
 
   // Text
+  Text,
   StopMarker,
   Escape,
   Other,
 }
+
+/*
+Text
+  - StopMarker
+  - Escape
+  - Other
+
+TagStart
+  - TagMarker {
+  - Flags? '@
+  - Name
+
+InlineAttrsEnd
+  - ContentMarker? :
+  - Flags? ='
+
+TagEnd
+  TagMarker }
+
+Content
+  - Text
+  - Tag
+*/
 
 const nodeTypes = [
   NodeType.none,
@@ -103,10 +129,11 @@ class TreeLeaf {
 }
 
 class TreeBuilder {
-  readonly children: (TreeLeaf | Tree | TreeBuffer)[] = []
+  // We postpone converting TreaLeaf to Tree, for we would need access to NodeSet.
+  readonly children: (Tree | TreeBuffer)[] = []
   readonly positions: number[] = []
 
-  constructor(readonly from: number, public type: number = Type.None) {}
+  constructor(readonly nodeSet: NodeSet, readonly from: number, public type: number = Type.None) {}
 
   private get rangeLength(): number {
     const lastIndex = this.positions.length - 1
@@ -122,33 +149,54 @@ class TreeBuilder {
     // Convenience to allow: const result = ...; if (result !== null) builder.add(result)
     // to become: builder.add(...)
     if (child === null) return false
+    if (child instanceof TextBuilder && !(this instanceof TextBuilder)) {
+      child = child.toTree()
+      log(child)
+    }
     if (child instanceof TreeBuilder) {
       const offset = child.from - this.from
       this.children.push(...child.children)
       this.positions.push(...child.positions.map(position => position + offset))
     } else {
-      const position =
-        from !== undefined
-          ? from - this.from
-          : child instanceof TreeLeaf
-          ? child.from - this.from
-          : this.rangeLength
+      let position: number
+      if (child instanceof TreeLeaf) {
+        const { type, to, from } = child
+        child = new Tree(this.nodeSet.types[type], [], [], to - from)
+        position = from - this.from
+      } else {
+        position = from !== undefined ? from - this.from : this.rangeLength
+      }
+      // log(child.type)
       this.children.push(child)
       this.positions.push(position)
     }
     return true
   }
 
-  toTree(nodeSet: NodeSet, length?: number) {
-    const children = this.children.map(child =>
-      child instanceof TreeLeaf ? new Tree(nodeSet.types[child.type], [], [], child.to - child.from) : child,
-    )
+  toTree(length?: number): Tree {
     return new Tree(
-      nodeSet.types[this.type],
-      children,
+      this.nodeSet.types[this.type],
+      this.children,
       this.positions,
       length !== undefined ? length : this.rangeLength,
     )
+  }
+}
+
+class TextBuilder extends TreeBuilder {
+  toTree(): Tree {
+    const buffer: number[] = []
+    for (let i = 0; i < this.children.length; i++) {
+      const child = this.children[i]
+      const position = this.positions[i]
+      buffer.push(child.type.id, position, position + child.length, 4)
+    }
+    return Tree.build({
+      topID: Type.Text,
+      buffer,
+      nodeSet: this.nodeSet,
+      reused: this.children,
+    })
   }
 }
 
@@ -168,8 +216,8 @@ class TagContext {
   isMultiline = false
   isLiteral = false
 
-  constructor(from: number, readonly parentScope: Scope) {
-    this.builder = new TreeBuilder(from, Type.AtomTag)
+  constructor(nodeSet: NodeSet, from: number, readonly parentScope: Scope) {
+    this.builder = new TreeBuilder(nodeSet, from, Type.AtomTag)
   }
 
   get type() {
@@ -180,8 +228,8 @@ class TagContext {
     this.builder.type = type
   }
 
-  toTree(nodeSet: NodeSet, to: number): Tree {
-    return this.builder.toTree(nodeSet, to - this.builder.from)
+  toTree(to: number): Tree {
+    return this.builder.toTree(to - this.builder.from)
   }
 }
 
@@ -209,14 +257,17 @@ const _z = 122
 
 class Parse implements PartialParse {
   readonly nodeSet: NodeSet
-  readonly topContents = new TreeBuilder(0, Type.TopContents)
+  readonly topContents: TreeBuilder
   readonly tagStack: TagContext[] = []
+  readonly fragments: FragmentCursor | null
   pos: number
   indents: number
   skipNewline = false
 
   constructor(parser: TagdownParser, readonly input: Input, start: number, parseContext: ParseContext) {
     this.nodeSet = parser.nodeSet
+    this.topContents = new TreeBuilder(this.nodeSet, 0, Type.TopContents)
+    this.fragments = parseContext.fragments ? new FragmentCursor(parseContext.fragments, input) : null
     this.pos = start
     this.indents = 0
   }
@@ -316,8 +367,8 @@ class Parse implements PartialParse {
     return length > 0 ? TreeLeaf.createFrom(Type.Other, from, length) : null
   }
 
-  private sliceLineEnd(start: number): TreeBuilder | null {
-    const builder = new TreeBuilder(this.pos)
+  private sliceLineEnd(start: number): TextBuilder | null {
+    const builder = new TextBuilder(this.nodeSet, this.pos)
     const length = this.pos - start
     let newLength = length
     while (newLength >= 1 && this.isSpaces(newLength - length - 1)) newLength--
@@ -333,8 +384,8 @@ class Parse implements PartialParse {
     return builder.length ? builder : null
   }
 
-  private parseBraceText(): TreeBuilder | null {
-    const builder = new TreeBuilder(this.pos)
+  private parseBraceText(): TextBuilder | null {
+    const builder = new TextBuilder(this.nodeSet, this.pos)
     let start = this.pos
     while (this.hasNext() && !this.isOneOf([LB, RB])) {
       const newline = this.matchNewline()
@@ -357,8 +408,8 @@ class Parse implements PartialParse {
     return builder.length ? builder : null
   }
 
-  private parseBraceLiteralText(): TreeBuilder | null {
-    const builder = new TreeBuilder(this.pos)
+  private parseBraceLiteralText(): TextBuilder | null {
+    const builder = new TextBuilder(this.nodeSet, this.pos)
     let start = this.pos
     for (let unbalanced = 0; this.hasNext() && !(this.isChr(RB) && !unbalanced); ) {
       const newline = this.matchNewline()
@@ -378,8 +429,8 @@ class Parse implements PartialParse {
     return builder.length ? builder : null
   }
 
-  private parseLineText(): TreeBuilder | null {
-    const builder = new TreeBuilder(this.pos)
+  private parseLineText(): TextBuilder | null {
+    const builder = new TextBuilder(this.nodeSet, this.pos)
     let start = this.pos
     while (this.hasNext() && !(this.isChr(LB) || this.matchNewline())) {
       if (this.esacpedOneOf([LB, RB])) {
@@ -397,7 +448,7 @@ class Parse implements PartialParse {
     return builder.length ? builder : null
   }
 
-  private parseLineLiteralText(): TreeBuilder | null {
+  private parseLineLiteralText(): TextBuilder | null {
     const start = this.pos
     while (!this.isLineEnd()) this.next()
     return this.sliceLineEnd(start)
@@ -405,10 +456,10 @@ class Parse implements PartialParse {
 
   private parseTagStart(scope: Scope): TagContext | null {
     if (!this.isChr(LB)) return null
-    const tag = new TagContext(this.pos, scope)
+    const tag = new TagContext(this.nodeSet, this.pos, scope)
     tag.builder.add(TreeLeaf.createFrom(Type.TagMarker, this.pos, 1))
     this.next()
-    this.addSpaces(tag.builder)
+    this.next(this.matchSpaces())
     let start = this.pos
     this.parseChr(SQ)
     this.parseChr(AT)
@@ -429,18 +480,10 @@ class Parse implements PartialParse {
     }
     if (this.pos > start) {
       tag.builder.add(TreeLeaf.createRange(Type.Name, start, this.pos))
-      this.addSpaces(tag.builder)
+      this.next(this.matchSpaces())
       tag.scope = Scope.InlineAttr
     }
     return tag
-  }
-
-  private addSpaces(builder: TreeBuilder): void {
-    const spaces = this.matchSpaces()
-    if (spaces) {
-      builder.add(TreeLeaf.createFrom(Type.Spaces, this.pos, spaces))
-      this.next(spaces)
-    }
   }
 
   private parseTagEnd(tag: TagContext): boolean {
@@ -514,15 +557,18 @@ class Parse implements PartialParse {
 
   private finishTag(): void {
     const tag = this.tagStack.shift()!
-    this.getBuilder().add(tag.toTree(this.nodeSet, this.pos), tag.builder.from)
+    this.getBuilder().add(tag.toTree(this.pos), tag.builder.from)
     if (tag.type === Type.IndentTag) this.indents--
     if (tag.type <= Type.LineTag && tag.parentScope === Scope.Content) this.skipNewline = true
   }
 
   private failTag(): void {
     const tag = this.tagStack.shift()!
-    const tagTree = tag.toTree(this.nodeSet, this.pos)
-    this.getBuilder().add(new Tree(this.nodeSet.types[Type.TagError], [tagTree], [0], tagTree.length))
+    const tagTree = tag.toTree(this.pos)
+    this.getBuilder().add(
+      new Tree(this.nodeSet.types[Type.TagError], [tagTree], [0], tagTree.length),
+      tag.builder.from,
+    )
     if (tag.parentScope === Scope.InlineAttr || tag.parentScope === Scope.BlockAttr) {
       this.failTag()
     }
@@ -547,7 +593,7 @@ class Parse implements PartialParse {
       const start = this.pos - 1
       if (this.parseChr(SQ)) tag.isLiteral = true
       tag.builder.add(TreeLeaf.createRange(Type.Flags, start, this.pos))
-      this.addSpaces(tag.builder)
+      this.next(this.matchSpaces())
       if (this.parseTagEnd(tag)) {
         const spaces = this.matchSpaces()
         if (this.matchNewline(spaces)) {
@@ -592,7 +638,7 @@ class Parse implements PartialParse {
       if (!tag.isMultiline) {
         this.parseChr(SP)
         tag.type = Type.LineTag
-        this.addSpaces(tag.builder)
+        this.next(this.matchSpaces())
         this.finishTag()
       } else {
         this.finishTag()
@@ -619,11 +665,11 @@ class Parse implements PartialParse {
     }
   }
 
-  advance(): Tree | null {
+  private parse(): Tree | null {
     if (this.tagStack.length) {
       const tag = this.tagStack[0]
       if (tag.scope === Scope.InlineAttr) {
-        if (this.continueNewTag()) this.addSpaces(tag.builder)
+        if (this.continueNewTag()) this.next(this.matchSpaces())
         else this.endInlineAttrScope(tag)
       } else if (tag.scope === Scope.BlockAttr) {
         const indents = this.countNewlineIndents()
@@ -645,6 +691,33 @@ class Parse implements PartialParse {
     return null
   }
 
+  private reuseFragment(): boolean {
+    if (!(this.fragments && this.fragments.moveTo(this.pos))) {
+      log(this.pos, "could not move to")
+      return false
+    }
+    const cursor = this.fragments.cursor!
+    const offset = this.fragments.fragment!.offset
+    log(this.pos, this.input.read(cursor.from - offset, cursor.to - offset), cursor.tree!)
+    // const start = this.pos
+    // let end = start
+    // let prevEnd = end
+    // do {
+    //   if (cursor.to - offset >= this.fragments.fragmentEnd) {
+    //     if (cursor.type.isAnonymous && cursor.firstChild()) continue
+    //     break
+    //   }
+    //   // builder.add(cursor.tree!, cursor.from - offset)
+    //   console.log(cursor.tree!)
+    //   console.log(printTree(cursor.tree!, this.input.read(cursor.from - offset, this.input.length)))
+    // } while (cursor.nextSibling())
+    return false
+  }
+
+  advance(): Tree | null {
+    return this.reuseFragment() ? null : this.parse()
+  }
+
   forceFinish(): Tree {
     while (this.tagStack.length) {
       this.failTag()
@@ -653,7 +726,68 @@ class Parse implements PartialParse {
   }
 
   finish(): Tree {
-    return this.topContents.toTree(this.nodeSet)
+    return this.topContents.toTree()
+  }
+}
+
+// Changes
+
+export class TagdownState {
+  constructor(readonly input: string, readonly tree: Tree, readonly fragments: readonly TreeFragment[]) {}
+
+  static start(input: string) {
+    const tree = parser.parse(input)
+    return new TagdownState(input, tree, TreeFragment.addTree(tree))
+  }
+
+  update(changes: { from: number; to?: number; insert?: string }[]) {
+    const changed: ChangedRange[] = []
+    let input = this.input
+    let off = 0
+    for (const { from, to = from, insert = "" } of changes) {
+      input = input.slice(0, from) + insert + input.slice(to)
+      changed.push({ fromA: from - off, toA: to - off, fromB: from, toB: from + insert.length })
+      off += insert.length - (to - from)
+    }
+    const fragments = TreeFragment.applyChanges(this.fragments, changed, 2)
+    const tree = parser.parse(input, 0, { fragments })
+    return new TagdownState(input, tree, TreeFragment.addTree(tree, fragments))
+  }
+}
+
+class FragmentCursor {
+  i = 0
+  fragment: TreeFragment | null
+  fragmentEnd: number
+  cursor: TreeCursor | null
+
+  constructor(readonly fragments: readonly TreeFragment[], readonly input: Input) {
+    this.nextFragment()
+  }
+
+  nextFragment() {
+    this.fragment = this.i < this.fragments.length ? this.fragments[this.i++] : null
+    this.fragmentEnd = -1
+    this.cursor = null
+  }
+
+  moveTo(docPos: number): boolean {
+    while (this.fragment && this.fragment.to <= docPos) this.nextFragment()
+    if (!this.fragment || this.fragment.from > (docPos ? docPos - 1 : 0)) return false
+    if (this.fragmentEnd < 0) {
+      let end = this.fragment.to
+      this.fragmentEnd = end ? end - 1 : 0
+    }
+    if (!this.cursor) {
+      this.cursor = this.fragment.tree.cursor()
+      this.cursor.firstChild()
+    }
+    const treePos = docPos + this.fragment.offset
+    while (this.cursor.to <= treePos) if (!this.cursor.parent()) return false
+    for (;;) {
+      if (this.cursor.from >= treePos) return true
+      if (!this.cursor.childAfter(treePos)) return false
+    }
   }
 }
 
