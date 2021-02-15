@@ -366,8 +366,8 @@ function parseBlockAttributes(): Tag[] {
 function tryParseTag(scope: ParseTagScope, contentsLayout?: ContentsLayout): Tag | null {
   if (!matchChr("{")) return null
   const isQuoted = matchChr("'")
-  const isAttribute = matchChr("@")
-  if (!isAttribute && (scope === ParseTagScope.InlineAttr || scope === ParseTagScope.BlockAttr)) return null
+  const isAttribute = matchChr("@") || scope === ParseTagScope.InlineAttr || scope === ParseTagScope.BlockAttr
+  // if (!isAttribute && (scope === ParseTagScope.InlineAttr || scope === ParseTagScope.BlockAttr)) return null
   const name = parseTagName()
   if (!name) return null
   const attributes: Tag[] = []

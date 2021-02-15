@@ -35,12 +35,18 @@ function inspect(arg: any): string {
     colors: true,
   })
 }
-export function printTree(tree: Tree, input: Input | string, from = 0, to = input.length): string {
+export function printTree(
+  tree: Tree,
+  input: Input | string,
+  opts: { from?: number; to?: number; offset?: number } = {},
+): string {
   if (typeof input === "string") input = stringInput(input)
+  const { from = 0, to = input.length, offset = 0 } = opts
   let out = ""
   const c = tree.cursor()
   const childPrefixes: string[] = []
   for (;;) {
+    const isTop = out === ""
     const { type } = c
     const cfrom = c.from
     const cto = c.to
@@ -48,7 +54,7 @@ export function printTree(tree: Tree, input: Input | string, from = 0, to = inpu
     if (cfrom <= to && cto >= from) {
       if (!type.isAnonymous) {
         leave = true
-        if (!type.isTop) {
+        if (!isTop) {
           out += "\n" + childPrefixes.join("")
           if (c.nextSibling() && c.prevSibling()) {
             out += " ├─ "
@@ -63,12 +69,14 @@ export function printTree(tree: Tree, input: Input | string, from = 0, to = inpu
       const isLeaf = !c.firstChild()
       if (!type.isAnonymous) {
         const hasRange = cfrom !== cto
-        out += ` ${hasRange ? `[${inspect(cfrom)}..${inspect(cto)}]` : inspect(cfrom)}`
+        out += ` ${
+          hasRange ? `[${inspect(cfrom + offset)}..${inspect(cto + offset)}]` : inspect(cfrom + offset)
+        }`
         if (isLeaf && hasRange) {
           out += `: ${inspect(input.read(cfrom, cto))}`
         }
       }
-      if (!isLeaf || type.isTop) continue
+      if (!isLeaf || isTop) continue
     }
     for (;;) {
       if (leave) childPrefixes.pop()

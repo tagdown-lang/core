@@ -1,0 +1,15 @@
+@top Contents { content* }
+content { Tag | text }
+Tag { TagStart space* Attr? TagName space* (Tag space*)* (ContentsStart content*)? TagEnd }
+text { Attr | TagName | ContentsStart | Other }
+@tokens {
+  TagStart[closedBy="TagEnd"] { "{" }
+  TagEnd[openedBy="TagStart"] { "}" }
+  TagName { (letterOrDigit+ space+)* letterOrDigit+ }
+  Attr { "@" }
+  ContentsStart { ":" " "? }
+  Other { ![\{\}:]+ }
+  @precedence { Attr, ContentsStart, TagName, Other }
+  letterOrDigit { std.asciiLetter | std.digit }
+  space { " " | "\t" }
+}

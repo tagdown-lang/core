@@ -1,3 +1,4 @@
+import { assert } from "console"
 import {
   ChangedRange,
   Input,
@@ -84,6 +85,14 @@ export class TagdownParser {
   constructor(readonly nodeSet: NodeSet) {}
 
   parse(input: Input | string, startPos = 0, parseContext: ParseContext = {}): Tree {
+    if (
+      parseContext.fragments &&
+      parseContext.fragments.length === 1 &&
+      parseContext.fragments[0].from === 0 &&
+      parseContext.fragments[0].to === input.length
+    ) {
+      return parseContext.fragments[0].tree
+    }
     let parse = parser.startParse(input, startPos, parseContext)
     let result: Tree | null
     while (!(result = parse.advance())) {}
@@ -140,35 +149,36 @@ class TreeBuilder {
     return lastIndex >= 0 ? this.positions[lastIndex] + this.children[lastIndex].length : 0
   }
 
+  get to(): number {
+    return this.from + this.rangeLength
+  }
+
   get length(): number {
     return this.children.length
   }
 
   // Return a boolean for convenience: builder.add(...) || ...
-  add(child: Tree | TreeBuffer | TreeBuilder | TreeLeaf | null, from?: number): boolean {
+  add(child: TreeBuilder | ReuseTree | Tree | TreeBuffer | TreeLeaf | null, from?: number): boolean {
     // Convenience to allow: const result = ...; if (result !== null) builder.add(result)
     // to become: builder.add(...)
     if (child === null) return false
     if (child instanceof TextBuilder && !(this instanceof TextBuilder)) {
-      child = child.toTree()
-      log(child)
-    }
-    if (child instanceof TreeBuilder) {
+      this.children.push(child.toTree())
+      this.positions.push(child.from - this.from)
+    } else if (child instanceof TreeBuilder) {
       const offset = child.from - this.from
       this.children.push(...child.children)
       this.positions.push(...child.positions.map(position => position + offset))
+    } else if (child instanceof ReuseTree) {
+      this.children.push(child.tree)
+      this.positions.push(child.pos)
+    } else if (child instanceof TreeLeaf) {
+      const { type, to, from } = child
+      this.children.push(new Tree(this.nodeSet.types[type], [], [], to - from))
+      this.positions.push(from - this.from)
     } else {
-      let position: number
-      if (child instanceof TreeLeaf) {
-        const { type, to, from } = child
-        child = new Tree(this.nodeSet.types[type], [], [], to - from)
-        position = from - this.from
-      } else {
-        position = from !== undefined ? from - this.from : this.rangeLength
-      }
-      // log(child.type)
       this.children.push(child)
-      this.positions.push(position)
+      this.positions.push(from !== undefined ? from - this.from : this.rangeLength)
     }
     return true
   }
@@ -268,6 +278,7 @@ class Parse implements PartialParse {
     this.nodeSet = parser.nodeSet
     this.topContents = new TreeBuilder(this.nodeSet, 0, Type.TopContents)
     this.fragments = parseContext.fragments ? new FragmentCursor(parseContext.fragments, input) : null
+    // this.fragments = null
     this.pos = start
     this.indents = 0
   }
@@ -368,7 +379,7 @@ class Parse implements PartialParse {
   }
 
   private sliceLineEnd(start: number): TextBuilder | null {
-    const builder = new TextBuilder(this.nodeSet, this.pos)
+    const builder = new TextBuilder(this.nodeSet, start)
     const length = this.pos - start
     let newLength = length
     while (newLength >= 1 && this.isSpaces(newLength - length - 1)) newLength--
@@ -503,7 +514,82 @@ class Parse implements PartialParse {
     return this.tagStack.length >= 2 ? this.tagStack[1].builder : this.topContents
   }
 
-  private continueNewTag(): boolean {
+  private moveFragment(): boolean {
+    // return false
+    // log("move fragment", this.pos)
+    return !!this.fragments && this.fragments.moveTo(this.pos)
+  }
+
+  private isFragmentEnd(): boolean {
+    return !(
+      this.fragments!.from >= this.fragments!.fragment.from &&
+      (!this.fragments!.fragment.openEnd || this.fragments!.to < this.fragments!.fragment.to)
+    )
+  }
+
+  private reuseTextContent(): boolean {
+    // log(this.fragments!.cursor.type.name)
+    const cond =
+      [Type.Other, Type.Escape, Type.StopMarker].includes(this.fragments!.type) &&
+      this.fragments!.cursor.parent() &&
+      !this.isFragmentEnd()
+    // log(this.fragments!.cursor.type.name, this.isFragmentEnd())
+    if (cond) this.addReuseTree()
+    // const text = new TextBuilder(this.nodeSet, this.pos)
+    // for (const leaf of this.fragments!.reuseRepeat([Type.Other, Type.Escape, Type.StopMarker])) {
+    //   text.add(leaf)
+    // }
+    // const cond = text.children.length > 0 && !this.isFragmentEnd()
+    // if (cond) {
+    //   this.getBuilder().add(text)
+    //   this.pos = this.fragments!.to
+    // }
+    // log("reuse text content", cond, this.pos)
+    return cond
+  }
+
+  private addReuseTree(): void {
+    const { tree, from, to } = this.fragments!
+    // log(tree, from, to)
+    // log(this.getBuilder())
+    this.getBuilder().add(tree, from)
+    this.pos = to
+  }
+
+  private reuseTagContent(): boolean {
+    // return false
+    log(
+      this.fragments!.cursor.name,
+      this.fragments!.cursor.from,
+      this.fragments!.from,
+      String.fromCharCode(this.input.get(this.fragments!.from)),
+    )
+    const cond =
+      this.fragments!.type === Type.TagMarker && this.fragments!.cursor.parent() && !this.isFragmentEnd()
+    if (cond) this.addReuseTree()
+    log(
+      "reuse tag content",
+      cond,
+      this.pos,
+      this.fragments!.from,
+      this.fragments!.fragment.from,
+      this.fragments!.to,
+      this.fragments!.fragment.to,
+      this.fragments!.fragment.openEnd,
+    )
+    return cond
+  }
+
+  private reuseTag(): boolean {
+    // return false
+    if (!this.moveFragment()) return false
+    const cond = this.reuseTagContent()
+    // log(this.fragments!.cursor.name, cond)
+    return cond
+    // return this.reuseTagContent()
+  }
+
+  parseTag(): boolean {
     const parentScope = this.tagStack.length ? this.tagStack[0].scope : Scope.Content
     const tag = this.parseTagStart(parentScope)
     if (!tag) return false
@@ -513,26 +599,35 @@ class Parse implements PartialParse {
   }
 
   private continueContents(subject: TagContext | TreeBuilder): boolean {
+    const cond = this.continueContents2(subject)
+    this.skipNewline = false
+    return cond
+  }
+
+  private continueContents2(subject: TagContext | TreeBuilder): boolean {
+    if (this.moveFragment() && (this.reuseTextContent() || this.reuseTagContent())) return true
     const builder = subject instanceof TagContext ? subject.builder : subject
     if (subject instanceof TreeBuilder || subject.type === Type.EndTag || subject.type === Type.IndentTag) {
       if (
         !(subject instanceof TagContext && subject.isLiteral
           ? builder.add(this.parseLineLiteralText())
-          : builder.add(this.parseLineText()) || this.continueNewTag())
+          : builder.add(this.parseLineText()) || this.parseTag())
       ) {
         const newline = this.matchNewline()
         if (newline) {
           const indents = this.countIndents(newline)
           if (indents.count === this.indents) {
-            if (!this.skipNewline) builder.add(TreeLeaf.createFrom(Type.Other, this.pos, newline))
-            else {
+            if (!this.skipNewline) {
+              const text = new TextBuilder(this.nodeSet, this.pos)
+              text.add(TreeLeaf.createFrom(Type.Other, this.pos, newline))
+              builder.add(text)
+            } else {
               const spaces = this.matchSpaces()
               const offset = newline + indents.length + spaces
               const newline2 = this.matchNewline(offset)
               if (this.hasEnded(offset) || newline2) {
-                builder.add(TreeLeaf.createFrom(Type.Other, this.pos + newline + indents.length, 0))
+                builder.add(TreeLeaf.createFrom(Type.Text, this.pos + newline + indents.length, 0))
               }
-              this.skipNewline = false
             }
             this.next(newline + indents.length)
             return true
@@ -540,17 +635,22 @@ class Parse implements PartialParse {
         }
       } else return true
     } else if (subject.type === Type.BraceTag || subject.type === Type.LineTag) {
+      let cond = true
       if (subject.isLiteral) {
         builder.add(
           subject.type === Type.BraceTag ? this.parseBraceLiteralText() : this.parseLineLiteralText(),
         )
         subject.scope = Scope.ContentEnd
-        return true
-      } else
-        return (
+      } else {
+        cond =
           builder.add(subject.type === Type.BraceTag ? this.parseBraceText() : this.parseLineText()) ||
-          this.continueNewTag()
-        )
+          this.parseTag()
+      }
+      // if (cond && this.skipNewline) {
+      //   log(this.pos, sliceInput(this), this.matchNewline())
+      //   this.next(this.matchNewline())
+      // }
+      return cond
     }
     return false
   }
@@ -559,7 +659,10 @@ class Parse implements PartialParse {
     const tag = this.tagStack.shift()!
     this.getBuilder().add(tag.toTree(this.pos), tag.builder.from)
     if (tag.type === Type.IndentTag) this.indents--
-    if (tag.type <= Type.LineTag && tag.parentScope === Scope.Content) this.skipNewline = true
+    if (tag.type <= Type.LineTag && tag.parentScope === Scope.Content) {
+      if (this.tagStack.length && this.tagStack[0].type === Type.BraceTag) this.next(this.matchNewline())
+      else this.skipNewline = true
+    }
   }
 
   private failTag(): void {
@@ -574,7 +677,81 @@ class Parse implements PartialParse {
     }
   }
 
-  private endInlineAttrScope(tag: TagContext): void {
+  // private reuseFragment(): boolean {
+  //   if (!(this.fragments && this.fragments.moveTo(this.pos))) {
+  //     log(this.pos, "could not move to")
+  //     return false
+  //   }
+  //   const cursor = this.fragments.cursor
+  //   const offset = this.fragments.fragment.offset
+  //   log(this.pos, this.input.read(cursor.from - offset, cursor.to - offset), cursor.tree!)
+  //   // const start = this.pos
+  //   // let end = start
+  //   // let prevEnd = end
+  //   // do {
+  //   //   if (cursor.to - offset >= this.fragments.fragmentEnd) {
+  //   //     if (cursor.type.isAnonymous && cursor.firstChild()) continue
+  //   //     break
+  //   //   }
+  //   //   // builder.add(cursor.tree!, cursor.from - offset)
+  //   //   console.log(cursor.tree!)
+  //   //   console.log(printTree(cursor.tree!, this.input.read(cursor.from - offset, this.input.length)))
+  //   // } while (cursor.nextSibling())
+  //   return false
+  // }
+
+  // reparse(): Tree {
+  //   if (!this.fragments || !this.fragments.length) {
+  //     let result: Tree | null
+  //     while (!(result = this.advance())) {}
+  //     return result
+  //   }
+  //   const f = this.fragments[0]
+  //   if (this.fragments.length === 1 && f.from === 0 && f.to === this.input.length) {
+  //     return f.tree
+  //   }
+  //   let fragment: TreeFragment | undefined
+  //   for (const f of this.fragments) {
+  //     if (this.pos >= f.from && this.pos < f.to) {
+  //       fragment = f
+  //       break
+  //     }
+  //   }
+  //   if (fragment) {
+  //     const c = fragment.tree.cursor()
+  //     const o = fragment.offset
+  //     c.childAfter(this.pos + o)
+  //     c.childAfter(this.pos + o)
+  //     log(c.type.name, c.from, c.to)
+  //     // while (!(c.from >= fragment.from && c.to <= fragment.to)) {
+  //     //   if (!c.firstChild()) {
+  //     //     break
+  //     //   }
+  //     // }
+  //   }
+  //   return this.finish()
+  // }
+
+  reuseAfterInlineAttrs(tag: TagContext): boolean {
+    return false
+    // if (!this.moveFragment()) return false
+    // const typeId = this.fragments!.type.id
+    // if (![Type.TagMarker, Type.ContentsMarker, Type.Flags].includes(typeId)) return false
+    // const reused = this.fragments!.reuseTree
+    // let flags: ReuseTree | undefined
+    // if (typeId === Type.ContentsMarker && this.fragments!.nextSibling(Type.Flags)) {
+    //   flags = this.fragments!.reuseTree
+    // } else if (typeId === Type.Flags) {
+    //   flags = reused
+    // }
+    // if (!(typeId === Type.TagMarker || (flags && flags.tree.length === 2)) && this.isFragmentEnd())
+    //   return false
+    // if (flags) tag.isLiteral = this.input.get(flags.pos + flags.tree.length - 1) === SQ
+    // return true
+  }
+
+  afterInlineAttrs(tag: TagContext): void {
+    if (this.reuseAfterInlineAttrs(tag)) return
     if (this.parseTagEnd(tag)) {
       this.finishTag()
     } else if (this.parseChr(CO)) {
@@ -609,7 +786,16 @@ class Parse implements PartialParse {
     } else this.failTag()
   }
 
-  private endBlockAttrScope(tag: TagContext): void {
+  reuseAfterBlockAttrs(tag: TagContext): boolean {
+    return false
+    // this.fragments.type.id === Type.ContentsMarker
+    // check for escape
+    // if not end of tag, check fragment end
+  }
+
+  afterBlockAttrs(tag: TagContext): void {
+    // contents marker or end of tag
+    if (this.reuseAfterBlockAttrs(tag)) return
     this.indents--
     const start = this.pos
     let indents = this.countNewlineIndents()
@@ -647,8 +833,14 @@ class Parse implements PartialParse {
           const escape =
             this.matchStr([BS, CO], indents.length) || this.matchStr([BS, HY, HY], indents.length)
           if (escape) {
+            // logTree(this, tag.builder)
+            // logTree(this, this.getBuilder())
+            // logTree(this, this.getParentBuilder())
             this.next(indents.length + escape)
-            this.getParentBuilder().add(TreeLeaf.createTo(Type.Escape, this.pos, escape))
+            const text = new TextBuilder(this.nodeSet, this.pos)
+            text.add(TreeLeaf.createTo(Type.Escape, this.pos, escape))
+            // log(Type[this.getBuilder().type], Type[this.getParentBuilder().type])
+            this.getBuilder().add(text)
             this.skipNewline = false
           }
         }
@@ -656,66 +848,55 @@ class Parse implements PartialParse {
     }
   }
 
-  private endContentScope(tag: TagContext): void {
+  afterContents(tag: TagContext): void {
+    // tag marker or end of tag
+    // if (this.fragments && this.fragments.moveTo(this.pos)) {
+    //   this.fragments.type.id === Type.TagMarker
+    // } else {
     if (tag.type === Type.BraceTag) {
       if (this.parseTagEnd(tag)) this.finishTag()
       else this.failTag()
     } else {
       this.finishTag()
     }
+    // }
   }
 
-  private parse(): Tree | null {
+  // It is all about where the reused/parsed stuff needs to got.
+  // No need to mark where they came into being like a AfterInlineAttrs, as we already know it has been unchanged,
+  // so we can just base it on this.pos, only reason we still need to go through the control flow is that
+  // we have to know where to add the reuse, e.g. which contents.
+  advance(): Tree | null {
     if (this.tagStack.length) {
       const tag = this.tagStack[0]
       if (tag.scope === Scope.InlineAttr) {
-        if (this.continueNewTag()) this.next(this.matchSpaces())
-        else this.endInlineAttrScope(tag)
+        if (!this.reuseTag()) {
+          if (this.parseTag()) this.next(this.matchSpaces())
+          else this.afterInlineAttrs(tag)
+        }
       } else if (tag.scope === Scope.BlockAttr) {
-        const indents = this.countNewlineIndents()
-        if (indents.count === this.indents) {
-          this.next(indents.length)
-          if (this.continueNewTag()) {
-            tag.isMultiline = true
-            this.skipNewline = false
-          } else this.endBlockAttrScope(tag)
-        } else this.endBlockAttrScope(tag)
+        const oldPos = this.pos
+        // log("reuse block attr", this.pos)
+        if (!this.reuseTag()) {
+          const indents = this.countNewlineIndents()
+          if (indents.count === this.indents) {
+            this.next(indents.length)
+            if (!this.parseTag()) this.pos = oldPos
+          }
+        }
+        if (this.pos > oldPos) {
+          tag.isMultiline = true
+          this.skipNewline = false
+        } else this.afterBlockAttrs(tag)
       } else if (tag.scope === Scope.Content) {
-        if (!this.continueContents(tag)) this.endContentScope(tag)
+        if (!this.continueContents(tag)) this.afterContents(tag)
       } else if (tag.scope === Scope.ContentEnd) {
-        this.endContentScope(tag)
-      } else this.failTag()
+        this.afterContents(tag)
+      }
     } else if (!this.continueContents(this.topContents)) {
       return this.finish()
     }
     return null
-  }
-
-  private reuseFragment(): boolean {
-    if (!(this.fragments && this.fragments.moveTo(this.pos))) {
-      log(this.pos, "could not move to")
-      return false
-    }
-    const cursor = this.fragments.cursor!
-    const offset = this.fragments.fragment!.offset
-    log(this.pos, this.input.read(cursor.from - offset, cursor.to - offset), cursor.tree!)
-    // const start = this.pos
-    // let end = start
-    // let prevEnd = end
-    // do {
-    //   if (cursor.to - offset >= this.fragments.fragmentEnd) {
-    //     if (cursor.type.isAnonymous && cursor.firstChild()) continue
-    //     break
-    //   }
-    //   // builder.add(cursor.tree!, cursor.from - offset)
-    //   console.log(cursor.tree!)
-    //   console.log(printTree(cursor.tree!, this.input.read(cursor.from - offset, this.input.length)))
-    // } while (cursor.nextSibling())
-    return false
-  }
-
-  advance(): Tree | null {
-    return this.reuseFragment() ? null : this.parse()
   }
 
   forceFinish(): Tree {
@@ -731,6 +912,10 @@ class Parse implements PartialParse {
 }
 
 // Changes
+
+class ReuseTree {
+  constructor(readonly tree: Tree, readonly pos: number) {}
+}
 
 export class TagdownState {
   constructor(readonly input: string, readonly tree: Tree, readonly fragments: readonly TreeFragment[]) {}
@@ -749,7 +934,7 @@ export class TagdownState {
       changed.push({ fromA: from - off, toA: to - off, fromB: from, toB: from + insert.length })
       off += insert.length - (to - from)
     }
-    const fragments = TreeFragment.applyChanges(this.fragments, changed, 2)
+    const fragments = TreeFragment.applyChanges(this.fragments, changed, 0)
     const tree = parser.parse(input, 0, { fragments })
     return new TagdownState(input, tree, TreeFragment.addTree(tree, fragments))
   }
@@ -757,37 +942,98 @@ export class TagdownState {
 
 class FragmentCursor {
   i = 0
-  fragment: TreeFragment | null
-  fragmentEnd: number
-  cursor: TreeCursor | null
+  fragment: TreeFragment
+  cursor: TreeCursor
 
   constructor(readonly fragments: readonly TreeFragment[], readonly input: Input) {
+    for (const fragment of fragments) {
+      const { from, to, offset, openStart, openEnd } = fragment
+      log({ from, to, offset, openStart, openEnd })
+    }
     this.nextFragment()
   }
 
-  nextFragment() {
-    this.fragment = this.i < this.fragments.length ? this.fragments[this.i++] : null
-    this.fragmentEnd = -1
-    this.cursor = null
+  get type() {
+    return this.cursor.type.id
   }
 
-  moveTo(docPos: number): boolean {
-    while (this.fragment && this.fragment.to <= docPos) this.nextFragment()
-    if (!this.fragment || this.fragment.from > (docPos ? docPos - 1 : 0)) return false
-    if (this.fragmentEnd < 0) {
-      let end = this.fragment.to
-      this.fragmentEnd = end ? end - 1 : 0
+  get tree() {
+    return this.cursor.tree!
+  }
+
+  get reuseTree() {
+    return {
+      tree: this.tree,
+      pos: this.from,
     }
-    if (!this.cursor) {
-      this.cursor = this.fragment.tree.cursor()
-      this.cursor.firstChild()
+  }
+
+  get from() {
+    return this.cursor.from - this.fragment.offset
+  }
+
+  get to() {
+    return this.cursor.to - this.fragment.offset
+  }
+
+  private nextFragment(): boolean {
+    if (this.i === this.fragments.length) return false
+    this.fragment = this.fragments[this.i++]
+    this.cursor = this.fragment.tree.cursor()
+    return true
+  }
+
+  // private fragmentAt(pos: number): TreeFragment | null {
+  //   for (const fragment of this.fragments) if (pos >= fragment.from && pos < fragment.to) return fragment
+  //   return null
+  // }
+
+  // moveTo2(pos: number): boolean {
+  //   const fragment = this.fragmentAt(pos)
+  //   if (!fragment) return false
+  //   this.fragment = fragment
+  //   const cursor = this.fragment.tree.cursor()
+  //   this.cursor = cursor
+  //   const treePos = pos + this.fragment.offset
+
+  //   while (this.cursor.to <= treePos) if (!this.cursor.parent()) return false
+  //   for (;;) {
+  //     if (this.cursor.from >= treePos) return true
+  //     if (!this.cursor.childAfter(treePos)) return false
+  //   }
+  // }
+
+  moveTo(pos: number): boolean {
+    const cond = this.moveTo2(pos)
+    // log(cond, this.cursor.tree)
+    // throw new Error("debug")
+    // log("move to", cond)
+    return cond
+  }
+
+  moveTo2(pos: number): boolean {
+    // log(pos, this.fragment.from, this.fragment.to)
+    while (!(pos >= this.fragment.from && pos < this.fragment.to)) if (!this.nextFragment()) return false
+    // log("found fragment", pos, this.fragment.from, this.fragment.to)
+    const treePos = pos + this.fragment.offset
+    while (treePos >= this.cursor.to) if (!this.cursor.parent()) return false
+    // log("after parent")
+    while (this.cursor.childAfter(treePos)) {}
+    // log(this.cursor.tree, treePos, this.cursor.from, this.cursor.to)
+    return this.cursor.from < this.fragment.to + this.fragment.offset && treePos < this.cursor.to
+  }
+
+  nextSibling(type: number): boolean {
+    return this.cursor.nextSibling() && this.cursor.type.id === type && this.cursor.to >= this.fragment.to
+  }
+
+  reuseRepeat(ids: number[]): ReuseTree[] {
+    const trees: ReuseTree[] = []
+    while (ids.includes(this.cursor.type.id)) {
+      trees.push(this.reuseTree)
+      if (!this.cursor.nextSibling()) break
     }
-    const treePos = docPos + this.fragment.offset
-    while (this.cursor.to <= treePos) if (!this.cursor.parent()) return false
-    for (;;) {
-      if (this.cursor.from >= treePos) return true
-      if (!this.cursor.childAfter(treePos)) return false
-    }
+    return trees
   }
 }
 
@@ -861,17 +1107,31 @@ function traverseTag(cursor: TreeCursor, input: Input): Tag {
   }
 }
 
+function traverseText(cursor: TreeCursor, input: Input): string {
+  let text = ""
+  if (cursor.firstChild()) {
+    do {
+      const { type, from, to } = cursor
+      if (type.id === Type.Other) {
+        text += input.read(from, to)
+      } else if (type.id === Type.Escape) {
+        text += input.read(from + +(input.get(from) === BS), to)
+      }
+    } while (cursor.nextSibling())
+    cursor.parent()
+  }
+  return text
+}
+
 function traverseContents(cursor: TreeCursor, input: Input): Content[] {
   const contents: Content[] = []
   let text: string | null = null
   do {
     const { type, from, to } = cursor
-    if (type.id === Type.Other || type.id === Type.TagError) {
+    if (type.id === Type.Text) {
+      text = (text || "") + traverseText(cursor, input)
+    } else if (type.id === Type.TagError) {
       text = (text || "") + input.read(from, to)
-    } else if (type.id === Type.Escape) {
-      text = (text || "") + input.read(from + +(input.get(from) === BS), to)
-    } else if (type.id === Type.StopMarker) {
-      text = text || ""
     } else if (type.is("Tag")) {
       if (text !== null) {
         contents.push(text)
@@ -913,4 +1173,15 @@ function tagName(parse: Parse, tag: TagContext): string {
     const position = builder.positions[i]
     return input.read(builder.from + position, builder.from + position + child.length)
   }
+}
+
+function logTree(parse: Parse, tree: Tree | TreeBuilder): void {
+  let input: string | Input = parse.input
+  let offset = 0
+  if (tree instanceof TreeBuilder) {
+    input = input.read(tree.from, parse.input.length)
+    offset = tree.from
+    tree = tree.toTree()
+  }
+  console.log(printTree(tree, input, { offset }))
 }

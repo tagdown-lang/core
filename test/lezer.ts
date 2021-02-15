@@ -43,9 +43,26 @@ const inputs = {
   18: "{a=}\n: \n  $\n\n\n",
   19: "{   a   {a  b",
   20: "{a{b}:x",
+  21: "{a=}\n  {text",
+  22: "{a: {a='} {\n}",
+  23: "{a=}\n  {@a=}\n  : {a=}\n      {@a}\n      {@a}\n      {@a}\n\n",
+  24: "{a=}\n  {@a=}\n    {@a}\n    {@a}\n    {@a}\n  : {a}\n\\:",
+  25: "{a=}\n--\n{a=}\n  {@a='} x3x({:6/\n\\: \\\\\\\\*cZh68:\\}D",
+  26: "{a=}\n  {b=}\n    {c=}\n      {d}\n\\: x",
+  27: "{o=}\n  {@z=} {O='} }\n--\n\n",
+  28: "{F=}\n--\n{G=}\n  {@X}\n  {@x}\n  {@A}\n\\:",
 }
 
-const input = inputs[1]
+// FIXME: 22 has a bug with Text reporting range 11 and not the supposed 10..11
+
+// const input = `{a=}
+// --
+// {b=}
+//   {c=} x
+// : {d: {e}}
+//   {f=} y
+// z`
+const input = inputs[28]
 // const input = `{a{@a: {a}}}`
 // const input = `{0}`
 // const input = "{a=}\n  {@a=}\n  : {a=}\n      {@a}\n      {@a}\n      {@a}\n    {a}"

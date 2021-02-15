@@ -25,13 +25,16 @@ export function compareTree(a: Tree, b: Tree) {
   }
 }
 
-const input = `{a=}
---
-x`
+// const input = `{a: {b}}`
+// const update = { from: 4, to: 5, insert: "" }
+const input = `{a: {x}}`
+const update = { from: 1, to: 2, insert: "abc" }
 
 const tree = parser.parse(input)
 console.log(printTree(tree, input))
 
 const state1 = TagdownState.start(input)
-const state2 = state1.update([{ from: 1, to: 2, insert: "b" }])
+const state2 = state1.update([update])
+const tree2 = parser.parse(state2.input)
+console.log(printTree(tree2, state2.input))
 console.log(printTree(state2.tree, state2.input))

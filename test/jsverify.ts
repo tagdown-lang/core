@@ -34,6 +34,11 @@ const arbVisibleAscii = alphabetToStringArbitrary(
   "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
 )
 
+const arbAlpha = alphabetToStringArbitrary("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+const arbAlphanumeric = alphabetToStringArbitrary(
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+)
+
 function joinTexts(contents: Content[]): Content[] {
   return contents.reduceRight((contents, content) => {
     if (typeof content === "string" && typeof contents[0] === "string") {
@@ -73,7 +78,9 @@ const genText = arbVisibleAscii.generator.map(str => {
   return text
 })
 
-const genTagName = arbVisibleAscii.generator
+const genTagName = gen.combine(arbAlpha.generator, gen.array(arbAlphanumeric.generator), (s1, ss) =>
+  [s1].concat(ss).join(" "),
+)
 
 function mapTagGen(name: string, attributes: Tag[], contents: Content[]): Tag {
   const isLiteral = contents.length === 1 && typeof contents[0] === "string" && jsc.random(1, 4) === 1
@@ -141,11 +148,15 @@ const shrText = shr.bless((text: string) =>
     .map(chrs => chrs.join("")),
 )
 
-const shrTagName = shr.bless((text: string) =>
-  shr
-    .nearray(shr.noop)(text.split(""))
-    .map(chrs => chrs.join("")),
-)
+const shrTagName = shr.bless((text: string) => {
+  const parts = text.split(" ")
+  return shr
+    .pair(
+      arbAlpha.shrink!,
+      shr.array(arbAlpha.shrink!),
+    )([parts[0], parts.slice(1)])
+    .map(([s1, ss]) => [s1].concat(ss).join(" "))
+})
 
 const shrContentTag = shrinkTag(false)
 const shrAttribute = shrinkTag(true)
