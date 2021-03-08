@@ -1,7 +1,17 @@
-import { Content, ContentsLayout, isTagContent, isTextContent, Tag } from "./types"
+import { Content, isTagContent, isTextContent, Tag } from "./types"
 import { assert } from "./utils"
 
 // Types
+
+// The top-level contents can be considered to be both within brace and indent contents,
+// so they are defined as bit flags to allow for unions.
+export enum ContentsLayout {
+  Atom = "atom", // {name}
+  Brace = "brace", // {name: text}
+  Line = "line", // {name=} text
+  Indent = "indent", // {name=}\n: text
+  End = "end", // {name=}\n--\ntext
+}
 
 interface PrintTag extends Tag {
   attributes: PrintTag[]
@@ -60,7 +70,7 @@ function prepareContents(contents: Content[]): PrintContent[] {
 
 function layoutTag(tag: PrintTag): void {
   for (const attr of tag.attributes) layoutTag(attr)
-  if (tag.attributes.length > 2) {
+  if (tag.attributes.length >= 3) {
     tag.contentsLayout = ContentsLayout.Indent
   } else if (!isLinesTag(tag)) {
     for (const attr of tag.attributes) {
@@ -121,7 +131,7 @@ function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
 // Assert
 
 function assertTag(tag: PrintTag): void {
-  assert(!/\r?\n/.test(tag.name), "newlines are disallowed in tag names")
+  assert(/[a-zA-Z][a-zA-Z0-9]*( [a-zA-Z0-9]+)*/.test(tag.name), "invalid tag name")
   if (isAtomTag(tag)) {
     assert(tag.contents.length === 0, "atom tags must have no contents")
   } else if (isBraceTag(tag)) {

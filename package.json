@@ -5,16 +5,13 @@
   "main": "out/index",
   "devDependencies": {
     "browser-util-inspect": "^0.2.0",
-    "fast-check": "^2.10.0",
-    "jsverify": "^0.8.4",
-    "lazy-seq": "^1.0.0",
+    "fast-check": "https://60300bf150dc580a45751048--dazzling-goodall-4f0e38.netlify.app/fast-check.tgz",
     "prettier": "^2.2.1",
     "ts-node": "^9.1.1",
     "typescript": "^4.1.3"
   },
   "private": true,
   "dependencies": {
-    "lezer": "^0.13.1",
     "lezer-tree": "^0.13.0"
   }
 }

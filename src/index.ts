@@ -1,25 +1,7 @@
-import * as parser from "./parser"
+export { Content, isContent, isContents, isTag, isTagContent, isText, isTextContent, Tag } from "./types"
 
-// Types
+export { shakeContents, shakeTag, ShakenContent, ShakenTag, unshakeContents, unshakeTag } from "./shake"
 
-export {
-  Content,
-  ContentsLayout,
-  isContent,
-  isContents,
-  isTag,
-  isTagContent,
-  isText,
-  isTextContent,
-  Tag,
-} from "./types"
+export { parseContents, parseTag, parser, TagdownParser, TagdownState } from "./parser"
 
-// Parser
-
-export const parseTag = parser.wrapTopLevelParser(() => parser.parseTag(parser.ParseTagScope.Content))
-// export const parseContents = parser.wrapTopLevelParser(parser.parseContents)
-export { parseContents } from "./lezer"
-
-// Printer
-
-export { printTag, printContents } from "./printer"
+export { printContents, printTag } from "./printer"

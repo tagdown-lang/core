@@ -1,7 +1,6 @@
 import * as _inspect from "browser-util-inspect"
 
-import { Content, parseContents, printContents, Tag } from "../src"
-import { shakeContents } from "../src/shake"
+import { Content, parseContents, printContents, shakeContents, Tag } from ".."
 
 export function inspect(arg: any): string {
   return _inspect(arg, {

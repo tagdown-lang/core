@@ -1,34 +1,16 @@
-import { Tree, TreeCursor } from "lezer-tree"
-import { parser, TagdownState } from "../src/lezer"
-import { printTree } from "../src/tree"
-
-function nextMD(cursor: TreeCursor) {
-  for (;;) {
-    if (!cursor.next()) return false
-    if (cursor.type == parser.nodeSet.types[cursor.type.id]) return true
-  }
-}
-
-export function compareTree(a: Tree, b: Tree) {
-  let curA = a.cursor(),
-    curB = b.cursor()
-  for (;;) {
-    let mismatch: string | null = null,
-      next = false
-    if (curA.type != curB.type) mismatch = `Node type mismatch (${curA.name} vs ${curB.name})`
-    else if (curA.from != curB.from)
-      mismatch = `Start pos mismatch for ${curA.name}: ${curA.from} vs ${curB.from}`
-    else if (curA.to != curB.to) mismatch = `End pos mismatch for ${curA.name}: ${curA.to} vs ${curB.to}`
-    else if ((next = nextMD(curA)) != nextMD(curB)) mismatch = `Tree size mismatch`
-    if (mismatch) throw new Error(`${mismatch}\n  ${a}\n  ${b}`)
-    if (!next) break
-  }
-}
+import { parser, TagdownState } from "../src/parser"
+import { printTree } from "../src/utils/print-lezer-tree"
 
 // const input = `{a: {b}}`
 // const update = { from: 4, to: 5, insert: "" }
-const input = `{a: {x}}`
-const update = { from: 1, to: 2, insert: "abc" }
+// const input = `{a: {x}}`
+// const update = { from: 1, to: 2, insert: "abc" }
+const input = `{a=}
+: {b=}
+  : x
+    y
+    z`
+const update = { from: 18, to: 23, insert: "" }
 
 const tree = parser.parse(input)
 console.log(printTree(tree, input))
