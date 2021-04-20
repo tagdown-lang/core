@@ -5,7 +5,7 @@ import { assert } from "./utils"
 
 // The top-level contents can be considered to be both within brace and indent contents,
 // so they are defined as bit flags to allow for unions.
-export enum ContentsLayout {
+export enum TagLayout {
   Atom = "atom", // {name}
   Brace = "brace", // {name: text}
   Line = "line", // {name=} text
@@ -16,7 +16,7 @@ export enum ContentsLayout {
 interface PrintTag extends Tag {
   attributes: PrintTag[]
   contents: PrintContent[]
-  contentsLayout: ContentsLayout
+  layout: TagLayout
 }
 
 type PrintContent = string | PrintTag
@@ -24,23 +24,23 @@ type PrintContent = string | PrintTag
 // Check
 
 function isAtomTag(tag: PrintTag): boolean {
-  return tag.contentsLayout === ContentsLayout.Atom
+  return tag.layout === TagLayout.Atom
 }
 
 function isBraceTag(tag: PrintTag): boolean {
-  return tag.contentsLayout === ContentsLayout.Brace
+  return tag.layout === TagLayout.Brace
 }
 
 function isLineTag(tag: PrintTag): boolean {
-  return tag.contentsLayout === ContentsLayout.Line
+  return tag.layout === TagLayout.Line
 }
 
 function isIndentTag(tag: PrintTag): boolean {
-  return tag.contentsLayout === ContentsLayout.Indent
+  return tag.layout === TagLayout.Indent
 }
 
 function isEndTag(tag: PrintTag): boolean {
-  return tag.contentsLayout === ContentsLayout.End
+  return tag.layout === TagLayout.End
 }
 
 function isInlineTag(tag: PrintTag): boolean {
@@ -58,7 +58,7 @@ function prepareTag(tag: Tag): PrintTag {
     ...tag,
     attributes: tag.attributes.map(prepareTag),
     contents: prepareContents(tag.contents),
-    contentsLayout: tag.contents.length > 0 ? ContentsLayout.Brace : ContentsLayout.Atom,
+    layout: tag.contents.length > 0 ? TagLayout.Brace : TagLayout.Atom,
   }
 }
 
@@ -71,11 +71,11 @@ function prepareContents(contents: Content[]): PrintContent[] {
 function layoutTag(tag: PrintTag): void {
   for (const attr of tag.attributes) layoutTag(attr)
   if (tag.attributes.length >= 3) {
-    tag.contentsLayout = ContentsLayout.Indent
+    tag.layout = TagLayout.Indent
   } else if (!isLinesTag(tag)) {
     for (const attr of tag.attributes) {
       if (!isInlineTag(attr)) {
-        tag.contentsLayout = ContentsLayout.Indent
+        tag.layout = TagLayout.Indent
         break
       }
     }
@@ -84,7 +84,7 @@ function layoutTag(tag: PrintTag): void {
   if (isLinesTag(tag)) {
     for (const attr of tag.attributes) {
       if (isBraceTag(attr)) {
-        attr.contentsLayout = ContentsLayout.Line
+        attr.layout = TagLayout.Line
       }
     }
   }
@@ -95,13 +95,13 @@ function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
   for (const content of contents) if (isTagContent(content)) layoutTag(content)
   const lastContent = contents[contents.length - 1]
   if (isTagContent(lastContent) && isIndentTag(lastContent)) {
-    lastContent.contentsLayout = ContentsLayout.End
+    lastContent.layout = TagLayout.End
   }
   if (!tag || isLinesTag(tag)) return
   let isPrevLineTag = false
   for (const content of contents) {
     if (isPrevLineTag || (isTagContent(content) ? isLinesTag(content) : /\r?\n/.test(content))) {
-      tag.contentsLayout = ContentsLayout.Indent
+      tag.layout = TagLayout.Indent
       return
     }
     if (isTagContent(content) && isLineTag(content)) {
@@ -123,7 +123,7 @@ function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
       }
     }
     if (unbalancedLeft > 0 || unbalancedRight > 0) {
-      tag.contentsLayout = ContentsLayout.Line
+      tag.layout = TagLayout.Line
     }
   }
 }

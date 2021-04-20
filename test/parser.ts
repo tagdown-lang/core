@@ -81,7 +81,13 @@ const inputs = {
 // {abc}
 // `
 // const input = inputs[3]
-const input = "{a=}\n  {@a=}\n  : {a=}\n    : \n      $\n    $"
+const input = `{note=}
+  {@uid=} 1wCfAKL
+  {@created=} 2020-08-20T17:35:45.379+02:00
+  {@modified=} 2021-01-15T23:25:11.534+01:00
+--
+{h1: Test}{a{@a{@a: foo}: bar}}bak
+`
 // const input = `{abc{@a:
 // {a}}}`
 // const input = `{0}`
@@ -98,6 +104,7 @@ console.log(input)
 log(tree)
 console.log(printTree(tree, input))
 log(shakeContents(parseTreeToContents(tree, input)))
+log(parser.nodeSet)
 // log(printContents(unshakeContents([{ name: "a" }, "", { name: "b" }])))
 // function semanticTokens(tree, input) {
 //   const tokens: object[] = []

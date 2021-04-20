@@ -1,4 +1,5 @@
 import { Input, NodeType, stringInput, Tree, TreeCursor } from "lezer-tree"
+import { log } from "./log"
 
 enum Color {
   Red = 31,
@@ -32,6 +33,7 @@ export function printTree(
     let leave = false
     if (node.from <= to && node.to >= from) {
       const enter = !node.type.isAnonymous && (includeParents || (node.from >= from && node.to <= to))
+      // log(node.type.name, enter, node, from, to)
       if (enter) {
         leave = true
         const isTop = output === ""
@@ -74,4 +76,12 @@ export function printTree(
       leave = true
     }
   }
+}
+
+export function logTree(
+  tree: Tree,
+  input: Input | string,
+  options: { from?: number; to?: number; start?: number; includeParents?: boolean } = {},
+): void {
+  console.log(printTree(tree, input, options))
 }

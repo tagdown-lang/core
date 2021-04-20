@@ -36,16 +36,6 @@ export type Tag = {
 // The language consists of a mixed content of text and tags.
 export type Content = string | Tag
 
-// The top-level contents can be considered to be both within brace and indent contents,
-// so they are defined as bit flags to allow for unions.
-export enum ContentsLayout {
-  Atom = 1 << 0, // {name}
-  Brace = 1 << 1, // {name: text}
-  Line = 1 << 2, // {name=} text
-  Indent = 1 << 3, // {name=}\n: text
-  End = 1 << 4, // {name=}\n--\ntext
-}
-
 // Check
 
 export function isText(arg: any): arg is string {

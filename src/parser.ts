@@ -33,7 +33,8 @@ enum Type {
 
   // Tag
   Contents,
-  Attributes,
+  InlineAttributes,
+  BlockAttributes,
   Name,
   Flags,
   ContentsMarker,
@@ -45,16 +46,25 @@ enum Type {
   Other,
 }
 
+// export const multilineNodeProp = NodeProp.flag()
+
 const nodeTypes = [
   NodeType.none,
   NodeType.define({ id: 1, name: Type[1], top: true }),
   NodeType.define({ id: 2, name: Type[2], error: true }),
 ]
 for (let i = 3, name: string; (name = Type[i]); i++) {
+  const props: [NodeProp<any>, any][] = []
+  if (name.endsWith("Tag")) {
+    props.push([NodeProp.group, ["Tag"]])
+  }
+  // if (["IndentTag", "EndTag"].includes(name)) {
+  //   props.push([multilineNodeProp, true])
+  // }
   nodeTypes[i] = NodeType.define({
     id: i,
     name,
-    props: name.endsWith("Tag") ? [[NodeProp.group, ["Tag"]]] : [],
+    props,
   })
 }
 
@@ -199,6 +209,12 @@ enum Scope {
 
 function isInnerScope(scope: Scope): boolean {
   return scope === Scope.InlineAttr || scope === Scope.BlockAttr || scope === Scope.Content
+}
+
+const scopeTypes = {
+  [Scope.InlineAttr]: Type.InlineAttributes,
+  [Scope.BlockAttr]: Type.BlockAttributes,
+  [Scope.Content]: Type.Contents,
 }
 
 class TagContext {
@@ -605,11 +621,7 @@ class Parse implements PartialParse {
     tag.scope = scope
     this.addInnerBuilder(tag)
     if (isInnerScope(scope)) {
-      tag.innerBuilder = new TreeBuilder(
-        this.nodeSet,
-        this.pos,
-        scope === Scope.Content ? Type.Contents : Type.Attributes,
-      )
+      tag.innerBuilder = new TreeBuilder(this.nodeSet, this.pos, scopeTypes[scope])
     }
   }
 
@@ -981,6 +993,7 @@ class FragmentCursor {
   }
 
   moveTo2(pos: number): boolean {
+    if (this.i === this.fragments.length) return false
     // log(pos, this.fragment.from, this.fragment.to)
     while (!(pos >= this.fragment.from && pos < this.fragment.to)) if (!this.nextFragment()) return false
     // log("found fragment", pos, this.fragment.from, this.fragment.to)
@@ -1022,16 +1035,16 @@ function sliceFlags(cursor: TreeCursor, input: Input): number[] {
   return s !== null ? s.split("").map(c => c.charCodeAt(0)) : []
 }
 
-function traverseTag(cursor: TreeCursor, input: Input): Tag {
+function traverseTag(cursor: TreeCursor, input: Input, isAttribute = false): Tag {
   const tagType = cursor.type.id
   cursor.firstChild()
   cursor.nextSibling()
   const tagFlags = sliceFlags(cursor, input)
   const isQuoted = tagFlags.includes(SQ)
-  const isAttribute = tagFlags.includes(AT)
+  isAttribute = isAttribute || tagFlags.includes(AT)
   const name = sliceType(cursor, input, Type.Name)!
   const attributes: Tag[] = []
-  if (cursor.type.id === Type.Attributes) {
+  if (cursor.type.id === Type.InlineAttributes) {
     attributes.push(...traverseAttributes(cursor, input))
   }
   let isLiteral = false
@@ -1041,7 +1054,7 @@ function traverseTag(cursor: TreeCursor, input: Input): Tag {
     cursor.nextSibling()
   }
   if (tagType === Type.EndTag || tagType === Type.IndentTag) {
-    if (cursor.type.id === Type.Attributes) {
+    if (cursor.type.id === Type.BlockAttributes) {
       attributes.push(...traverseAttributes(cursor, input))
     }
     if (cursor.type.id === Type.ContentsMarker) {
@@ -1074,7 +1087,7 @@ function traverseAttributes(cursor: TreeCursor, input: Input): Tag[] {
   const attributes: Tag[] = []
   cursor.firstChild()
   while (cursor.type.is("Tag")) {
-    attributes.push(traverseTag(cursor, input))
+    attributes.push(traverseTag(cursor, input, true))
     if (!cursor.nextSibling()) break
   }
   cursor.parent()
