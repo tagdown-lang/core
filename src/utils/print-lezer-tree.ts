@@ -25,7 +25,7 @@ export function printTree(
 ): string {
   const cursor = tree.cursor()
   if (typeof input === "string") input = stringInput(input)
-  const { from = 0, to = input.length, start = 0, includeParents = false } = options
+  const { from = -Infinity, to = Infinity, start = 0, includeParents = false } = options
   let output = ""
   const prefixes: string[] = []
   for (;;) {
@@ -33,7 +33,6 @@ export function printTree(
     let leave = false
     if (node.from <= to && node.to >= from) {
       const enter = !node.type.isAnonymous && (includeParents || (node.from >= from && node.to <= to))
-      // log(node.type.name, enter, node, from, to)
       if (enter) {
         leave = true
         const isTop = output === ""

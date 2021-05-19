@@ -1,24 +1,17 @@
 import {
-  ChangedRange,
   Input,
-  NodeProp,
   NodePropSource,
   NodeSet,
   NodeType,
-  ParseContext,
-  PartialParse,
   stringInput,
   Tree,
   TreeBuffer,
   TreeCursor,
-  TreeFragment,
 } from "lezer-tree"
 
 import { Content, isTagContent, Tag } from "./types"
-import { log } from "./utils/log"
-import { printTree } from "./utils/print-lezer-tree"
 
-enum Type {
+export enum Type {
   // Special
   None,
   TopContents,
@@ -32,13 +25,13 @@ enum Type {
   AtomTag,
 
   // Tag
-  Contents,
+  TagMarker,
+  Flags,
+  Name,
   InlineAttributes,
   BlockAttributes,
-  Name,
-  Flags,
   ContentsMarker,
-  TagMarker,
+  Contents,
 
   // Text
   StopMarker,
@@ -46,7 +39,19 @@ enum Type {
   Other,
 }
 
-// export const multilineNodeProp = NodeProp.flag()
+function toNodeTypeId(arg: Tree | TreeBuffer | NodeType | number): number {
+  return typeof arg === "number" ? arg : (arg instanceof NodeType ? arg : arg.type).id
+}
+
+export function isMultilineTag(arg: Tree | TreeBuffer | NodeType | number): boolean {
+  const id = toNodeTypeId(arg)
+  return id === Type.IndentTag || id === Type.EndTag
+}
+
+export function isTag(arg: Tree | TreeBuffer | NodeType | number): boolean {
+  const id = toNodeTypeId(arg)
+  return id in Type && Type[id].endsWith("Tag")
+}
 
 const nodeTypes = [
   NodeType.none,
@@ -54,41 +59,19 @@ const nodeTypes = [
   NodeType.define({ id: 2, name: Type[2], error: true }),
 ]
 for (let i = 3, name: string; (name = Type[i]); i++) {
-  const props: [NodeProp<any>, any][] = []
-  if (name.endsWith("Tag")) {
-    props.push([NodeProp.group, ["Tag"]])
-  }
-  // if (["IndentTag", "EndTag"].includes(name)) {
-  //   props.push([multilineNodeProp, true])
-  // }
   nodeTypes[i] = NodeType.define({
     id: i,
     name,
-    props,
   })
 }
 
 export class TagdownParser {
   constructor(readonly nodeSet: NodeSet) {}
 
-  parse(input: Input | string, startPos = 0, parseContext: ParseContext = {}): Tree {
-    if (
-      parseContext.fragments &&
-      parseContext.fragments.length === 1 &&
-      parseContext.fragments[0].from === 0 &&
-      parseContext.fragments[0].to === input.length
-    ) {
-      return parseContext.fragments[0].tree
-    }
-    let parse = parser.startParse(input, startPos, parseContext)
-    let result: Tree | null
-    while (!(result = parse.advance())) {}
-    return result
-  }
-
-  startParse(input: Input | string, startPos = 0, parseContext: ParseContext = {}): PartialParse {
+  parse(input: Input | string, startPos = 0): Tree {
     if (typeof input === "string") input = stringInput(input)
-    return new Parse(this, input, startPos, parseContext)
+    let parse = new Parse(this, input, startPos)
+    return parse.finish()
   }
 
   configure(config: { props?: readonly NodePropSource[] }): TagdownParser {
@@ -125,7 +108,6 @@ class TreeLeaf {
 }
 
 class TreeBuilder {
-  // We postpone converting TreaLeaf to Tree, for we would need access to NodeSet.
   readonly children: (Tree | TreeBuffer)[] = []
   readonly positions: number[] = []
 
@@ -145,21 +127,14 @@ class TreeBuilder {
   }
 
   // Return a boolean for convenience: builder.add(...) || ...
-  add(child: TreeBuilder | ReuseTree | Tree | TreeBuffer | TreeLeaf | null, from?: number): boolean {
+  add(child: TreeBuilder | Tree | TreeBuffer | TreeLeaf | null, from?: number): boolean {
     // Convenience to allow: const result = ...; if (result !== null) builder.add(result)
     // to become: builder.add(...)
     if (child === null) return false
-    // if (child instanceof TextBuilder && !(this instanceof TextBuilder)) {
-    //   this.children.push(child.toTree())
-    //   this.positions.push(child.from - this.from)
-    // } else
     if (child instanceof TreeBuilder) {
       const offset = child.from - this.from
       this.children.push(...child.children)
       this.positions.push(...child.positions.map(position => position + offset))
-    } else if (child instanceof ReuseTree) {
-      this.children.push(child.tree)
-      this.positions.push(child.pos)
     } else if (child instanceof TreeLeaf) {
       const { type, to, from } = child
       this.children.push(new Tree(this.nodeSet.types[type], [], [], to - from))
@@ -190,60 +165,10 @@ class TextBuilder extends TreeBuilder {
       buffer.push(child.type.id, position, position + child.length, 4)
     }
     return Tree.build({
-      // topID: Type.Text,
       buffer,
       nodeSet: this.nodeSet,
       reused: this.children,
     })
-  }
-}
-
-enum Scope {
-  Start,
-  InlineAttr,
-  BlockAttr,
-  Content,
-  ContentEnd,
-  End,
-}
-
-function isInnerScope(scope: Scope): boolean {
-  return scope === Scope.InlineAttr || scope === Scope.BlockAttr || scope === Scope.Content
-}
-
-const scopeTypes = {
-  [Scope.InlineAttr]: Type.InlineAttributes,
-  [Scope.BlockAttr]: Type.BlockAttributes,
-  [Scope.Content]: Type.Contents,
-}
-
-class TagContext {
-  readonly builder: TreeBuilder
-  innerBuilder: TreeBuilder | null = null
-
-  // On every `advance` we lose all lexical context, so we need to keep track of it here.
-  scope = Scope.Start
-  isMultiline = false
-  isLiteral = false
-
-  constructor(nodeSet: NodeSet, from: number, readonly parentScope: Scope) {
-    this.builder = new TreeBuilder(nodeSet, from, Type.AtomTag)
-  }
-
-  get type() {
-    return this.builder.type
-  }
-
-  set type(type: number) {
-    this.builder.type = type
-  }
-
-  toTree(to: number): Tree {
-    return this.builder.toTree(to - this.builder.from)
-  }
-
-  getBuilder(): TreeBuilder {
-    return this.innerBuilder && isInnerScope(this.scope) ? this.innerBuilder! : this.builder
   }
 }
 
@@ -269,22 +194,32 @@ const _Z = 90
 const _a = 97
 const _z = 122
 
-class Parse implements PartialParse {
+enum TagScope {
+  InlineAttribute,
+  BlockAttribute,
+  Content,
+}
+
+enum ParseTagResult {
+  None,
+  Fail,
+  Finish,
+}
+
+class Parse {
   readonly nodeSet: NodeSet
-  readonly topContents: TreeBuilder
-  readonly tagStack: TagContext[] = []
-  readonly fragments: FragmentCursor | null
   pos: number
   indents: number[]
   skipNewline = false
 
-  constructor(parser: TagdownParser, readonly input: Input, start: number, parseContext: ParseContext) {
+  constructor(parser: TagdownParser, readonly input: Input, start: number) {
     this.nodeSet = parser.nodeSet
-    this.topContents = new TreeBuilder(this.nodeSet, 0, Type.TopContents)
-    this.fragments = parseContext.fragments ? new FragmentCursor(parseContext.fragments, input) : null
-    // this.fragments = null
     this.pos = start
     this.indents = [0]
+  }
+
+  private createTreeBuilder(type: Type): TreeBuilder {
+    return new TreeBuilder(this.nodeSet, this.pos, type)
   }
 
   private next(count = 1): void {
@@ -469,17 +404,46 @@ class Parse implements PartialParse {
     return this.sliceLineEnd(start)
   }
 
-  private parseTagStart(scope: Scope): TagContext | null {
-    if (!this.isChr(LB)) return null
-    const tag = new TagContext(this.nodeSet, this.pos, scope)
-    this.tagAdd(tag, TreeLeaf.createFrom(Type.TagMarker, this.pos, 1))
+  private parseTagEnd(tagBuilder: TreeBuilder): boolean {
+    const cond = this.isChr(RB)
+    if (cond) {
+      tagBuilder.add(TreeLeaf.createFrom(Type.TagMarker, this.pos, 1))
+      this.next()
+    }
+    return cond
+  }
+
+  private addTagInnerBuilder(tagBuilder: TreeBuilder, innerBuilder: TreeBuilder): void {
+    if (innerBuilder.length || innerBuilder.type === Type.Contents) {
+      tagBuilder.add(innerBuilder.toTree(), innerBuilder.from)
+    }
+  }
+
+  private finishTag(tagBuilder: TreeBuilder, parentBuilder: TreeBuilder): ParseTagResult.Finish {
+    parentBuilder.add(tagBuilder.toTree(this.pos - tagBuilder.from), tagBuilder.from)
+    return ParseTagResult.Finish
+  }
+
+  private failTag(tagBuilder: TreeBuilder, parentBuilder: TreeBuilder): ParseTagResult.Fail {
+    const tagTree = tagBuilder.toTree(this.pos - tagBuilder.from)
+    parentBuilder.add(
+      new Tree(this.nodeSet.types[Type.TagError], [tagTree], [0], tagTree.length),
+      tagBuilder.from,
+    )
+    return ParseTagResult.Fail
+  }
+
+  private parseTag(parentScope: TagScope, parentBuilder: TreeBuilder): ParseTagResult {
+    if (!this.isChr(LB)) return ParseTagResult.None
+    const tag = this.createTreeBuilder(Type.AtomTag)
+    tag.add(TreeLeaf.createFrom(Type.TagMarker, this.pos, 1))
     this.next()
     this.next(this.matchSpaces())
     let start = this.pos
     this.parseChr(SQ)
     this.parseChr(AT)
     if (this.pos > start) {
-      this.tagAdd(tag, TreeLeaf.createRange(Type.Flags, start, this.pos))
+      tag.add(TreeLeaf.createRange(Type.Flags, start, this.pos))
     }
     start = this.pos
     if (this.isAlpha()) {
@@ -493,529 +457,165 @@ class Parse implements PartialParse {
         } while (this.isAlphanumeric())
       }
     }
-    if (this.pos > start) {
-      this.tagAdd(tag, TreeLeaf.createRange(Type.Name, start, this.pos))
-      this.next(this.matchSpaces())
-      this.setScope(tag, Scope.InlineAttr)
+    if (this.pos === start) return ParseTagResult.None
+    tag.add(TreeLeaf.createRange(Type.Name, start, this.pos))
+    this.next(this.matchSpaces())
+    const inlineAttributes = this.createTreeBuilder(Type.InlineAttributes)
+    let failed = false
+    for (;;) {
+      const result = this.parseTag(TagScope.InlineAttribute, inlineAttributes)
+      if (!result) break
+      if (result === ParseTagResult.Finish) continue
+      failed = true
+      break
     }
-    return tag
-  }
-
-  private addInnerBuilder(tag: TagContext): void {
-    if (tag.innerBuilder) {
-      if (tag.innerBuilder.length || tag.innerBuilder.type === Type.Contents) {
-        tag.builder.add(tag.innerBuilder.toTree(), tag.innerBuilder.from)
-      }
-      tag.innerBuilder = null
-    }
-  }
-
-  private tagAdd(
-    tag: TagContext,
-    child: TreeBuilder | ReuseTree | Tree | TreeBuffer | TreeLeaf | null,
-    from?: number,
-  ): boolean {
-    this.addInnerBuilder(tag)
-    return tag.builder.add(child, from)
-  }
-
-  private parseTagEnd(tag: TagContext): boolean {
-    const cond = this.isChr(RB)
-    if (cond) {
-      this.tagAdd(tag, TreeLeaf.createFrom(Type.TagMarker, this.pos, 1))
-      this.next()
-    }
-    return cond
-  }
-
-  private getBuilder(): TreeBuilder {
-    return this.tagStack.length ? this.tagStack[0].getBuilder() : this.topContents
-  }
-
-  private moveFragment(): boolean {
-    // return false
-    // log("move fragment", this.pos)
-    return !!this.fragments && this.fragments.moveTo(this.pos)
-  }
-
-  private isFragmentEnd(): boolean {
-    return !(
-      this.fragments!.from >= this.fragments!.fragment.from &&
-      (!this.fragments!.fragment.openEnd || this.fragments!.to < this.fragments!.fragment.to)
-    )
-  }
-
-  private reuseTextContent(): boolean {
-    // log(this.fragments!.cursor.type.name)
-    const cond =
-      [Type.Other, Type.Escape, Type.StopMarker].includes(this.fragments!.type) &&
-      this.fragments!.cursor.parent() &&
-      !this.isFragmentEnd()
-    // log(this.fragments!.cursor.type.name, this.isFragmentEnd())
-    if (cond) this.addReuseTree()
-    // const text = new TextBuilder(this.nodeSet, this.pos)
-    // for (const leaf of this.fragments!.reuseRepeat([Type.Other, Type.Escape, Type.StopMarker])) {
-    //   text.add(leaf)
-    // }
-    // const cond = text.children.length > 0 && !this.isFragmentEnd()
-    // if (cond) {
-    //   this.getBuilder().add(text)
-    //   this.pos = this.fragments!.to
-    // }
-    // log("reuse text content", cond, this.pos)
-    return cond
-  }
-
-  private addReuseTree(): void {
-    const { tree, from, to } = this.fragments!
-    // log(tree, from, to)
-    // log(this.getBuilder())
-    // log("reuse", from, to, tree)
-    this.getBuilder().add(tree, from)
-    this.pos = to
-  }
-
-  private reuseTagContent(): boolean {
-    // return false
-    // log(
-    //   this.fragments!.cursor.name,
-    //   this.fragments!.cursor.from,
-    //   this.fragments!.from,
-    //   String.fromCharCode(this.input.get(this.fragments!.from)),
-    // )
-    const cond =
-      this.fragments!.type === Type.TagMarker && this.fragments!.cursor.parent() && !this.isFragmentEnd()
-    if (cond) this.addReuseTree()
-    // log(
-    //   "reuse tag content",
-    //   cond,
-    //   this.pos,
-    //   this.fragments!.from,
-    //   this.fragments!.fragment.from,
-    //   this.fragments!.to,
-    //   this.fragments!.fragment.to,
-    //   this.fragments!.fragment.openEnd,
-    // )
-    return cond
-  }
-
-  private reuseTag(): boolean {
-    // return false
-    if (!this.moveFragment()) return false
-    const cond = this.reuseTagContent()
-    // log(this.fragments!.cursor.name, cond)
-    return cond
-    // return this.reuseTagContent()
-  }
-
-  parseTag(): boolean {
-    const parentScope = this.tagStack.length ? this.tagStack[0].scope : Scope.Content
-    const tag = this.parseTagStart(parentScope)
-    if (!tag) return false
-    this.tagStack.unshift(tag)
-    if (tag.scope === Scope.Start) this.failTag()
-    return true
-  }
-
-  private setScope(tag: TagContext, scope: Scope): void {
-    tag.scope = scope
-    this.addInnerBuilder(tag)
-    if (isInnerScope(scope)) {
-      tag.innerBuilder = new TreeBuilder(this.nodeSet, this.pos, scopeTypes[scope])
-    }
-  }
-
-  private continueContents(subject: TagContext | TreeBuilder): boolean {
-    const cond = this.continueContents2(subject)
-    this.skipNewline = false
-    return cond
-  }
-
-  private continueContents2(subject: TagContext | TreeBuilder): boolean {
-    if (this.moveFragment() && (this.reuseTextContent() || this.reuseTagContent())) return true
-    const builder = subject instanceof TagContext ? subject.innerBuilder! : subject
-    if (subject instanceof TreeBuilder || subject.type === Type.EndTag || subject.type === Type.IndentTag) {
-      if (
-        !(subject instanceof TagContext && subject.isLiteral
-          ? builder.add(this.parseLineLiteralText())
-          : builder.add(this.parseLineText()) || this.parseTag())
-      ) {
-        const newline = this.matchNewline()
-        if (newline) {
-          const indents = this.countIndents(newline)
-          if (indents.count === this.indents[0]) {
-            if (!this.skipNewline) {
-              const text = new TextBuilder(this.nodeSet, this.pos)
-              text.add(TreeLeaf.createFrom(Type.Other, this.pos, newline))
-              builder.add(text)
-            } else {
-              const spaces = this.matchSpaces()
-              const offset = newline + indents.length + spaces
-              const newline2 = this.matchNewline(offset)
-              if (this.hasEnded(offset) || newline2) {
-                builder.add(TreeLeaf.createFrom(Type.Other, this.pos + newline + indents.length, 0))
-              }
-            }
-            this.next(newline + indents.length)
-            return true
-          }
-        }
-      } else return true
-    } else if (subject.type === Type.BraceTag || subject.type === Type.LineTag) {
-      let cond = true
-      if (subject.isLiteral) {
-        builder.add(
-          subject.type === Type.BraceTag ? this.parseBraceLiteralText() : this.parseLineLiteralText(),
-        )
-        this.setScope(subject, Scope.ContentEnd)
-      } else {
-        cond =
-          builder.add(subject.type === Type.BraceTag ? this.parseBraceText() : this.parseLineText()) ||
-          this.parseTag()
-      }
-      // if (cond && this.skipNewline) {
-      //   log(this.pos, sliceInput(this), this.matchNewline())
-      //   this.next(this.matchNewline())
-      // }
-      return cond
-    }
-    return false
-  }
-
-  private endTag(tag: TagContext): void {
-    if (tag.type === Type.BraceTag) this.indents.shift()
-    this.setScope(tag, Scope.End)
-  }
-
-  private finishTag(): void {
-    const tag = this.tagStack.shift()!
-    this.getBuilder().add(tag.toTree(this.pos), tag.builder.from)
-    if (tag.type === Type.IndentTag) this.indents[0]--
-    if (tag.type <= Type.LineTag && tag.parentScope === Scope.Content) {
-      if (this.tagStack.length && this.tagStack[0].type === Type.BraceTag) this.next(this.matchNewline())
-      else this.skipNewline = true
-    }
-    this.endTag(tag)
-  }
-
-  private failTag(): void {
-    const tag = this.tagStack.shift()!
-    this.endTag(tag)
-    const tagTree = tag.toTree(this.pos)
-    this.getBuilder().add(
-      new Tree(this.nodeSet.types[Type.TagError], [tagTree], [0], tagTree.length),
-      tag.builder.from,
-    )
-    if (tag.parentScope === Scope.InlineAttr || tag.parentScope === Scope.BlockAttr) {
-      this.failTag()
-    }
-  }
-
-  reuseAfterInlineAttrs(tag: TagContext): boolean {
-    return false
-    // if (!this.moveFragment()) return false
-    // const typeId = this.fragments!.type.id
-    // if (![Type.TagMarker, Type.ContentsMarker, Type.Flags].includes(typeId)) return false
-    // const reused = this.fragments!.reuseTree
-    // let flags: ReuseTree | undefined
-    // if (typeId === Type.ContentsMarker && this.fragments!.nextSibling(Type.Flags)) {
-    //   flags = this.fragments!.reuseTree
-    // } else if (typeId === Type.Flags) {
-    //   flags = reused
-    // }
-    // if (!(typeId === Type.TagMarker || (flags && flags.tree.length === 2)) && this.isFragmentEnd())
-    //   return false
-    // if (flags) tag.isLiteral = this.input.get(flags.pos + flags.tree.length - 1) === SQ
-    // return true
-  }
-
-  afterInlineAttrs(tag: TagContext): void {
-    if (this.reuseAfterInlineAttrs(tag)) return
-    if (this.parseTagEnd(tag)) {
-      this.finishTag()
-    } else if (this.parseChr(CO)) {
+    this.addTagInnerBuilder(tag, inlineAttributes)
+    if (failed) return this.failTag(tag, parentBuilder)
+    let isLiteral = false
+    if (this.parseTagEnd(tag)) return this.finishTag(tag, parentBuilder)
+    const contents = this.createTreeBuilder(Type.Contents)
+    if (this.parseChr(CO)) {
       tag.type = Type.BraceTag
-      this.tagAdd(tag, TreeLeaf.createTo(Type.ContentsMarker, this.pos, 1))
+      tag.add(TreeLeaf.createTo(Type.ContentsMarker, this.pos, 1))
       if (this.parseChr(SQ)) {
-        tag.isLiteral = true
-        this.tagAdd(tag, TreeLeaf.createTo(Type.Flags, this.pos, 1))
+        isLiteral = true
+        tag.add(TreeLeaf.createTo(Type.Flags, this.pos, 1))
       }
       this.parseChr(SP)
-      this.setScope(tag, Scope.Content)
       this.indents.unshift(0)
+      if (isLiteral) contents.add(this.parseBraceLiteralText())
+      else while (contents.add(this.parseBraceText()) || this.parseTag(TagScope.Content, contents)) {}
+      this.addTagInnerBuilder(tag, contents)
+      if (this.parseTagEnd(tag)) return this.finishTag(tag, parentBuilder)
+      else return this.failTag(tag, parentBuilder)
     } else if (
       this.parseChr(EQ) &&
-      (tag.parentScope === Scope.Content || tag.parentScope === Scope.BlockAttr)
+      (parentScope === TagScope.Content || parentScope === TagScope.BlockAttribute)
     ) {
       const start = this.pos - 1
-      if (this.parseChr(SQ)) tag.isLiteral = true
-      this.tagAdd(tag, TreeLeaf.createRange(Type.Flags, start, this.pos))
+      if (this.parseChr(SQ)) isLiteral = true
+      tag.add(TreeLeaf.createRange(Type.Flags, start, this.pos))
       this.next(this.matchSpaces())
       if (this.parseTagEnd(tag)) {
         const spaces = this.matchSpaces()
         if (this.matchNewline(spaces)) {
           tag.type = Type.EndTag
-          this.setScope(tag, Scope.BlockAttr)
           this.indents[0]++
+          const blockAttributes = this.createTreeBuilder(Type.BlockAttributes)
+          for (;;) {
+            const indents = this.countNewlineIndents()
+            if (indents.count === this.indents[0]) {
+              const start = this.pos
+              this.next(indents.length)
+              const result = this.parseTag(TagScope.BlockAttribute, blockAttributes)
+              if (!result) {
+                this.pos = start
+                break
+              }
+              if (result === ParseTagResult.Finish) continue
+              failed = true
+              break
+            }
+          }
+          this.addTagInnerBuilder(tag, blockAttributes)
+          if (failed) return this.failTag(tag, parentBuilder)
+          if (blockAttributes.length) this.skipNewline = false
+          let isMultiline = !!blockAttributes.length
+          this.indents[0]--
+          const start = this.pos
+          let indents = this.countNewlineIndents()
+          const { length } = indents
+          if (indents.count === this.indents[0]) {
+            if (
+              this.matchStr([HY, HY], length) &&
+              ((indents = this.countNewlineIndents(length + 2)) || this.hasEnded(length + 2))
+            ) {
+              tag.add(TreeLeaf.createFrom(Type.ContentsMarker, this.pos + length, 2))
+              this.next(length + 2 + indents.length)
+            } else if (this.isChr(CO, length) && (this.isChr(SP, length + 1) || this.isLineEnd(length + 1))) {
+              tag.type = Type.IndentTag
+              tag.add(TreeLeaf.createFrom(Type.ContentsMarker, this.pos + length, 1))
+              this.next(length + 1)
+              this.parseChr(SP)
+            }
+            if (this.pos > start) {
+              isMultiline = true
+              if (tag.type === Type.IndentTag) this.indents[0]++
+              if (isLiteral) contents.add(this.parseBraceLiteralText())
+              else {
+                while (
+                  contents.add(this.parseLineText()) ||
+                  this.parseTag(TagScope.Content, contents) ||
+                  this.parseMultilineDelimiter(contents)
+                ) {}
+              }
+              this.addTagInnerBuilder(tag, contents)
+              return this.finishTag(tag, parentBuilder)
+            }
+          }
+          if (isMultiline) {
+            const result = this.finishTag(tag, parentBuilder)
+            const indents = this.countNewlineIndents()
+            if (indents.count === this.indents[0]) {
+              const escape =
+                this.matchStr([BS, CO], indents.length) || this.matchStr([BS, HY, HY], indents.length)
+              if (escape) {
+                this.next(indents.length + escape)
+                const text = new TextBuilder(this.nodeSet, this.pos)
+                text.add(TreeLeaf.createTo(Type.Escape, this.pos, escape))
+                parentBuilder.add(text)
+                this.skipNewline = false
+              }
+            }
+            return result
+          }
+          tag.type = Type.LineTag
+          this.parseChr(SP)
+          this.addTagInnerBuilder(tag, new TreeBuilder(this.nodeSet, this.pos, Type.Contents))
+          this.next(this.matchSpaces())
+          return this.finishTag(tag, parentBuilder)
         } else {
           this.parseChr(SP)
           tag.type = Type.LineTag
-          this.setScope(tag, Scope.Content)
-        }
-      } else this.failTag()
-    } else this.failTag()
-  }
-
-  reuseAfterBlockAttrs(tag: TagContext): boolean {
-    return false
-    // this.fragments.type.id === Type.ContentsMarker
-    // check for escape
-    // if not end of tag, check fragment end
-  }
-
-  afterBlockAttrs(tag: TagContext): void {
-    // contents marker or end of tag
-    if (this.reuseAfterBlockAttrs(tag)) return
-    this.indents[0]--
-    const start = this.pos
-    let indents = this.countNewlineIndents()
-    const { length } = indents
-    // log("end block attr scope", sliceInput(this), indents, this.indents)
-    if (indents.count === this.indents[0]) {
-      if (
-        this.matchStr([HY, HY], length) &&
-        ((indents = this.countNewlineIndents(length + 2)) || this.hasEnded(length + 2))
-      ) {
-        this.tagAdd(tag, TreeLeaf.createFrom(Type.ContentsMarker, this.pos + length, 2))
-        this.next(length + 2 + indents.length)
-      } else if (this.isChr(CO, length) && (this.isChr(SP, length + 1) || this.isLineEnd(length + 1))) {
-        tag.type = Type.IndentTag
-        this.tagAdd(tag, TreeLeaf.createFrom(Type.ContentsMarker, this.pos + length, 1))
-        this.next(length + 1)
-        this.parseChr(SP)
-      }
-      if (this.pos > start) {
-        if (tag.type === Type.IndentTag) this.indents[0]++
-        this.setScope(tag, Scope.Content)
-        tag.isMultiline = true
-      }
-    }
-    if (tag.scope !== Scope.Content) {
-      if (!tag.isMultiline) {
-        tag.type = Type.LineTag
-        this.parseChr(SP)
-        tag.innerBuilder = new TreeBuilder(this.nodeSet, this.pos, Type.Contents)
-        this.next(this.matchSpaces())
-        this.finishTag()
-      } else {
-        this.finishTag()
-        const indents = this.countNewlineIndents()
-        if (indents.count === this.indents[0]) {
-          const escape =
-            this.matchStr([BS, CO], indents.length) || this.matchStr([BS, HY, HY], indents.length)
-          if (escape) {
-            // logTree(this, tag.builder)
-            // logTree(this, this.getBuilder())
-            // logTree(this, this.getParentBuilder())
-            this.next(indents.length + escape)
-            const text = new TextBuilder(this.nodeSet, this.pos)
-            text.add(TreeLeaf.createTo(Type.Escape, this.pos, escape))
-            // log(Type[this.getBuilder().type], Type[this.getParentBuilder().type])
-            this.getBuilder().add(text)
-            this.skipNewline = false
-          }
+          if (isLiteral) contents.add(this.parseLineLiteralText())
+          else while (contents.add(this.parseLineText()) || this.parseTag(TagScope.Content, contents)) {}
+          this.addTagInnerBuilder(tag, contents)
+          return this.finishTag(tag, parentBuilder)
         }
       }
     }
+    return this.failTag(tag, parentBuilder)
   }
 
-  afterContents(tag: TagContext): void {
-    // tag marker or end of tag
-    // if (this.fragments && this.fragments.moveTo(this.pos)) {
-    //   this.fragments.type.id === Type.TagMarker
-    // } else {
-    if (tag.type === Type.BraceTag) {
-      if (this.parseTagEnd(tag)) this.finishTag()
-      else this.failTag()
+  private parseMultilineDelimiter(builder: TreeBuilder): boolean {
+    const newline = this.matchNewline()
+    if (!newline) return false
+    const indents = this.countIndents(newline)
+    if (indents.count !== this.indents[0]) return false
+    if (!this.skipNewline) {
+      const text = new TextBuilder(this.nodeSet, this.pos)
+      text.add(TreeLeaf.createFrom(Type.Other, this.pos, newline))
+      builder.add(text)
     } else {
-      this.finishTag()
-    }
-    // }
-  }
-
-  // It is all about where the reused/parsed stuff needs to got.
-  // No need to mark where they came into being like a AfterInlineAttrs, as we already know it has been unchanged,
-  // so we can just base it on this.pos, only reason we still need to go through the control flow is that
-  // we have to know where to add the reuse, e.g. which contents.
-  advance(): Tree | null {
-    if (this.tagStack.length) {
-      const tag = this.tagStack[0]
-      if (tag.scope === Scope.InlineAttr) {
-        if (!this.reuseTag()) {
-          if (this.parseTag()) this.next(this.matchSpaces())
-          else this.afterInlineAttrs(tag)
-        }
-      } else if (tag.scope === Scope.BlockAttr) {
-        const oldPos = this.pos
-        // log("reuse block attr", this.pos)
-        if (!this.reuseTag()) {
-          const indents = this.countNewlineIndents()
-          if (indents.count === this.indents[0]) {
-            this.next(indents.length)
-            if (!this.parseTag()) this.pos = oldPos
-          }
-        }
-        if (this.pos > oldPos) {
-          tag.isMultiline = true
-          this.skipNewline = false
-        } else this.afterBlockAttrs(tag)
-      } else if (tag.scope === Scope.Content) {
-        if (!this.continueContents(tag)) this.afterContents(tag)
-      } else if (tag.scope === Scope.ContentEnd) {
-        this.afterContents(tag)
+      const spaces = this.matchSpaces()
+      const offset = newline + indents.length + spaces
+      const newline2 = this.matchNewline(offset)
+      if (this.hasEnded(offset) || newline2) {
+        builder.add(TreeLeaf.createFrom(Type.Other, this.pos + newline + indents.length, 0))
       }
-    } else if (!this.continueContents(this.topContents)) {
-      return this.finish()
     }
-    return null
-  }
-
-  forceFinish(): Tree {
-    while (this.tagStack.length) {
-      this.failTag()
-    }
-    return this.finish()
-  }
-
-  finish(): Tree {
-    return this.topContents.toTree()
-  }
-}
-
-// Changes
-
-class ReuseTree {
-  constructor(readonly tree: Tree, readonly pos: number) {}
-}
-
-export class TagdownState {
-  constructor(readonly input: string, readonly tree: Tree, readonly fragments: readonly TreeFragment[]) {}
-
-  static start(input: string) {
-    const tree = parser.parse(input)
-    return new TagdownState(input, tree, TreeFragment.addTree(tree))
-  }
-
-  update(changes: { from: number; to?: number; insert?: string }[]) {
-    const changed: ChangedRange[] = []
-    let input = this.input
-    let off = 0
-    for (const { from, to = from, insert = "" } of changes) {
-      input = input.slice(0, from) + insert + input.slice(to)
-      changed.push({ fromA: from - off, toA: to - off, fromB: from, toB: from + insert.length })
-      off += insert.length - (to - from)
-    }
-    const fragments = TreeFragment.applyChanges(this.fragments, changed, 0)
-    const tree = parser.parse(input, 0, { fragments })
-    return new TagdownState(input, tree, TreeFragment.addTree(tree, fragments))
-  }
-}
-
-class FragmentCursor {
-  i = 0
-  fragment: TreeFragment
-  cursor: TreeCursor
-
-  constructor(readonly fragments: readonly TreeFragment[], readonly input: Input) {
-    for (const fragment of fragments) {
-      const { from, to, offset, openStart, openEnd } = fragment
-      // log({ from, to, offset, openStart, openEnd })
-    }
-    this.nextFragment()
-  }
-
-  get type() {
-    return this.cursor.type.id
-  }
-
-  get tree() {
-    return this.cursor.tree!
-  }
-
-  get reuseTree() {
-    return {
-      tree: this.tree,
-      pos: this.from,
-    }
-  }
-
-  get from() {
-    return this.cursor.from - this.fragment.offset
-  }
-
-  get to() {
-    return this.cursor.to - this.fragment.offset
-  }
-
-  private nextFragment(): boolean {
-    if (this.i === this.fragments.length) return false
-    this.fragment = this.fragments[this.i++]
-    this.cursor = this.fragment.tree.cursor()
+    this.next(newline + indents.length)
     return true
   }
 
-  // private fragmentAt(pos: number): TreeFragment | null {
-  //   for (const fragment of this.fragments) if (pos >= fragment.from && pos < fragment.to) return fragment
-  //   return null
-  // }
-
-  // moveTo2(pos: number): boolean {
-  //   const fragment = this.fragmentAt(pos)
-  //   if (!fragment) return false
-  //   this.fragment = fragment
-  //   const cursor = this.fragment.tree.cursor()
-  //   this.cursor = cursor
-  //   const treePos = pos + this.fragment.offset
-
-  //   while (this.cursor.to <= treePos) if (!this.cursor.parent()) return false
-  //   for (;;) {
-  //     if (this.cursor.from >= treePos) return true
-  //     if (!this.cursor.childAfter(treePos)) return false
-  //   }
-  // }
-
-  moveTo(pos: number): boolean {
-    const cond = this.moveTo2(pos)
-    // log(cond, this.cursor.tree)
-    // throw new Error("debug")
-    // log("move to", cond)
-    return cond
-  }
-
-  moveTo2(pos: number): boolean {
-    if (this.i === this.fragments.length) return false
-    // log(pos, this.fragment.from, this.fragment.to)
-    while (!(pos >= this.fragment.from && pos < this.fragment.to)) if (!this.nextFragment()) return false
-    // log("found fragment", pos, this.fragment.from, this.fragment.to)
-    const treePos = pos + this.fragment.offset
-    while (treePos >= this.cursor.to) if (!this.cursor.parent()) return false
-    // log("after parent")
-    while (this.cursor.childAfter(treePos)) {}
-    // log(this.cursor.tree, treePos, this.cursor.from, this.cursor.to)
-    return this.cursor.from < this.fragment.to + this.fragment.offset && treePos < this.cursor.to
-  }
-
-  nextSibling(type: number): boolean {
-    return this.cursor.nextSibling() && this.cursor.type.id === type && this.cursor.to >= this.fragment.to
-  }
-
-  reuseRepeat(ids: number[]): ReuseTree[] {
-    const trees: ReuseTree[] = []
-    while (ids.includes(this.cursor.type.id)) {
-      trees.push(this.reuseTree)
-      if (!this.cursor.nextSibling()) break
-    }
-    return trees
+  public finish(): Tree {
+    const topContents = new TreeBuilder(this.nodeSet, 0, Type.TopContents)
+    while (
+      topContents.add(this.parseLineText()) ||
+      this.parseTag(TagScope.Content, topContents) ||
+      this.parseMultilineDelimiter(topContents)
+    ) {}
+    return topContents.toTree()
   }
 }
 
@@ -1134,36 +734,4 @@ export function parseTag(input: string): Tag | undefined {
   const contents = parseContents(input)
   if (contents.length === 1 && isTagContent(contents[0])) return contents[0]
   return
-}
-
-// Debugging
-
-function sliceInput(parse: Parse): string {
-  return parse.input.read(parse.pos, parse.input.length)
-}
-
-function tagName(parse: Parse, tag: TagContext): string {
-  const input = parse.input
-  const builder = tag.builder
-  const i = builder.children.findIndex(child =>
-    child instanceof TreeLeaf ? child.type === Type.Name : child.type.id === Type.Name,
-  )!
-  const child = builder.children[i]
-  if (child instanceof TreeLeaf) {
-    return input.read(child.from, child.to)
-  } else {
-    const position = builder.positions[i]
-    return input.read(builder.from + position, builder.from + position + child.length)
-  }
-}
-
-function logTree(parse: Parse, tree: Tree | TreeBuilder): void {
-  let input: string | Input = parse.input
-  let start = 0
-  if (tree instanceof TreeBuilder) {
-    input = input.read(tree.from, parse.input.length)
-    start = tree.from
-    tree = tree.toTree()
-  }
-  console.log(printTree(tree, input, { start }))
 }

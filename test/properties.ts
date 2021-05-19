@@ -1,18 +1,7 @@
 import * as fc from "fast-check"
 
-import {
-  Content,
-  isTagContent,
-  parseContents,
-  parser,
-  printContents,
-  shakeContents,
-  Tag,
-  TagdownState,
-} from "../src"
-import { parseTreeToContents } from "../src/parser"
-import { log } from "../src/utils/log"
-import { logTree } from "../src/utils/print-lezer-tree"
+import { Content, isTagContent, parseContents, printContents, Tag } from "../src"
+import { logPrint } from "../src/utils/log"
 
 function joinTexts(contents: Content[]): Content[] {
   return contents.reduceRight((contents, content) => {
@@ -148,62 +137,62 @@ function assertProperty<T>(
   })
 }
 
-// assertProperty(
-//   contentsArb(5),
-//   contents => {
-//     const output = printContents(contents)
-//     return printContents(parseContents(output)) === output
-//   },
-//   contents => logPrint(contents),
-// )
-
-const input = `{note=}
-  {@uid=} 1wCfAKL
-  {@created=} 2020-08-20T17:35:45.379+02:00
-  {@modified=} 2021-01-15T23:25:11.534+01:00
---
-{a=}
---
-{b=}
-  {c=} x
-: {d: {e}}
-  {f=} y
-z`
-
 assertProperty(
-  fc
-    .record({
-      from: fc.nat(input.length),
-      to: fc.nat(input.length),
-      insert: textArb,
-    })
-    .map(r => {
-      if (r.from > r.to) {
-        const tmp = r.from
-        r.from = r.to
-        r.to = tmp
-      }
-      return r
-    }),
-  ({ from, to, insert }) => {
-    const state1 = TagdownState.start(input)
-    const state2 = state1.update([{ from, to, insert }])
-    return (
-      printContents(parseTreeToContents(state2.tree, state2.input)) ===
-      printContents(parseContents(state2.input))
-    )
+  contentsArb(5),
+  contents => {
+    const output = printContents(contents)
+    return printContents(parseContents(output)) === output
   },
-  ({ from, to, insert }) => {
-    const state1 = TagdownState.start(input)
-    const state2 = state1.update([{ from, to, insert }])
-    const tree2 = parser.parse(state2.input)
-    log({ from, to, insert })
-    log(state2.input)
-    console.log(state2.input)
-    log(state2.tree)
-    logTree(state2.tree, state2.input)
-    logTree(tree2, state2.input)
-    log(shakeContents(parseTreeToContents(state2.tree, state2.input)))
-    log(shakeContents(parseTreeToContents(tree2, state2.input)))
-  },
+  contents => logPrint(contents),
 )
+
+// const input = `{note=}
+//   {@uid=} 1wCfAKL
+//   {@created=} 2020-08-20T17:35:45.379+02:00
+//   {@modified=} 2021-01-15T23:25:11.534+01:00
+// --
+// {a=}
+// --
+// {b=}
+//   {c=} x
+// : {d: {e}}
+//   {f=} y
+// z`
+
+// assertProperty(
+//   fc
+//     .record({
+//       from: fc.nat(input.length),
+//       to: fc.nat(input.length),
+//       insert: textArb,
+//     })
+//     .map(r => {
+//       if (r.from > r.to) {
+//         const tmp = r.from
+//         r.from = r.to
+//         r.to = tmp
+//       }
+//       return r
+//     }),
+//   ({ from, to, insert }) => {
+//     const state1 = TagdownState.start(input)
+//     const state2 = state1.update([{ from, to, insert }])
+//     return (
+//       printContents(parseTreeToContents(state2.tree, state2.input)) ===
+//       printContents(parseContents(state2.input))
+//     )
+//   },
+//   ({ from, to, insert }) => {
+//     const state1 = TagdownState.start(input)
+//     const state2 = state1.update([{ from, to, insert }])
+//     const tree2 = parser.parse(state2.input)
+//     log({ from, to, insert })
+//     log(state2.input)
+//     console.log(state2.input)
+//     log(state2.tree)
+//     logTree(state2.tree, state2.input)
+//     logTree(tree2, state2.input)
+//     log(shakeContents(parseTreeToContents(state2.tree, state2.input)))
+//     log(shakeContents(parseTreeToContents(tree2, state2.input)))
+//   },
+// )
