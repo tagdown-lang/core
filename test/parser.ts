@@ -80,6 +80,12 @@ const inputs = {
 // {abc}
 // `
 const input = inputs[3]
+// const input = "{a=}\n  {@a=} {a='} {\n  {@a=}\n    {@a=}\n    : \n      $"
+// "{a=}\n  {@a=}\n  : {a=}\n    --\n    \n    $\n  {@a=}\n    {@a=}\n      {@a=}\n      : \n        $"
+// "{a=}\n--\n{a=}\n  {@a='}\n  : \n    $"
+// "{a=}\n  {@a=}\n    {@a=}\n      {@a='} {\n  : {a: }\n--\n"
+// "{note=}\n  {@uid=} 1wCfAKL\n  {@created=} 2020-08-20T17:35:45.379+02:00\n  {@modified=} 2021-01-15T23:25:11.534+01:00\n--\n{h1: Test}{a{@a{@a: foo}: bar}}bak\n"
+
 // const input = `{note=}
 //   {@uid=} 1wCfAKL
 //   {@created=} 2020-08-20T17:35:45.379+02:00
@@ -100,7 +106,6 @@ console.time()
 const tree = parser.parse(input)
 console.timeEnd()
 console.log(input)
-log(tree)
 console.log(printTree(tree, input))
 log(shakeContents(parseTreeToContents(tree, input)))
 // log(parser.nodeSet)

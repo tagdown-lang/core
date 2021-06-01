@@ -11,6 +11,8 @@ import {
 
 import { Content, isTagContent, Tag } from "./types"
 
+// Needs to be exported, otherwise when using `Tree`, `NodeType` can only be inspected with `name`,
+// making it string typed. Exporting the enum makes it more type safe and easier to refactor.
 export enum Type {
   // Special
   None,
@@ -39,16 +41,17 @@ export enum Type {
   Other,
 }
 
-function toNodeTypeId(arg: Tree | TreeBuffer | NodeType | number): number {
+type NodeTypeLike = number | NodeType | Tree | TreeBuffer | TreeCursor
+
+function toNodeTypeId(arg: NodeTypeLike): number {
   return typeof arg === "number" ? arg : (arg instanceof NodeType ? arg : arg.type).id
 }
 
-export function isMultilineTag(arg: Tree | TreeBuffer | NodeType | number): boolean {
-  const id = toNodeTypeId(arg)
-  return id === Type.IndentTag || id === Type.EndTag
+export function isMultilineTagNode(arg: NodeTypeLike): boolean {
+  return [Type.IndentTag, Type.EndTag].includes(toNodeTypeId(arg))
 }
 
-export function isTag(arg: Tree | TreeBuffer | NodeType | number): boolean {
+export function isTagNode(arg: NodeTypeLike): boolean {
   const id = toNodeTypeId(arg)
   return id in Type && Type[id].endsWith("Tag")
 }
@@ -65,6 +68,8 @@ for (let i = 3, name: string; (name = Type[i]); i++) {
   })
 }
 
+// Tried to be made compatible, in so far possible, with:
+// https://lezer.codemirror.net/docs/ref/#lezer.Parser
 export class TagdownParser {
   constructor(readonly nodeSet: NodeSet) {}
 
@@ -419,8 +424,17 @@ class Parse {
     }
   }
 
-  private finishTag(tagBuilder: TreeBuilder, parentBuilder: TreeBuilder): ParseTagResult.Finish {
-    parentBuilder.add(tagBuilder.toTree(this.pos - tagBuilder.from), tagBuilder.from)
+  private finishTag(
+    tag: TreeBuilder,
+    parentScope: TagScope,
+    parentBuilder: TreeBuilder,
+    parentTag?: TreeBuilder,
+  ): ParseTagResult.Finish {
+    parentBuilder.add(tag.toTree(this.pos - tag.from), tag.from)
+    if (tag.type <= Type.LineTag && parentScope === TagScope.Content) {
+      if (parentTag && parentTag.type === Type.BraceTag) this.next(this.matchNewline())
+      else this.skipNewline = true
+    }
     return ParseTagResult.Finish
   }
 
@@ -433,7 +447,11 @@ class Parse {
     return ParseTagResult.Fail
   }
 
-  private parseTag(parentScope: TagScope, parentBuilder: TreeBuilder): ParseTagResult {
+  private parseTag(
+    parentScope: TagScope,
+    parentBuilder: TreeBuilder,
+    parentTag?: TreeBuilder,
+  ): ParseTagResult {
     if (!this.isChr(LB)) return ParseTagResult.None
     const tag = this.createTreeBuilder(Type.AtomTag)
     tag.add(TreeLeaf.createFrom(Type.TagMarker, this.pos, 1))
@@ -463,7 +481,7 @@ class Parse {
     const inlineAttributes = this.createTreeBuilder(Type.InlineAttributes)
     let failed = false
     for (;;) {
-      const result = this.parseTag(TagScope.InlineAttribute, inlineAttributes)
+      const result = this.parseTag(TagScope.InlineAttribute, inlineAttributes, tag)
       if (!result) break
       if (result === ParseTagResult.Finish) continue
       failed = true
@@ -472,7 +490,7 @@ class Parse {
     this.addTagInnerBuilder(tag, inlineAttributes)
     if (failed) return this.failTag(tag, parentBuilder)
     let isLiteral = false
-    if (this.parseTagEnd(tag)) return this.finishTag(tag, parentBuilder)
+    if (this.parseTagEnd(tag)) return this.finishTag(tag, parentScope, parentBuilder, parentTag)
     const contents = this.createTreeBuilder(Type.Contents)
     if (this.parseChr(CO)) {
       tag.type = Type.BraceTag
@@ -484,9 +502,10 @@ class Parse {
       this.parseChr(SP)
       this.indents.unshift(0)
       if (isLiteral) contents.add(this.parseBraceLiteralText())
-      else while (contents.add(this.parseBraceText()) || this.parseTag(TagScope.Content, contents)) {}
+      else while (contents.add(this.parseBraceText()) || this.parseTag(TagScope.Content, contents, tag)) {}
       this.addTagInnerBuilder(tag, contents)
-      if (this.parseTagEnd(tag)) return this.finishTag(tag, parentBuilder)
+      this.indents.shift()
+      if (this.parseTagEnd(tag)) return this.finishTag(tag, parentScope, parentBuilder, parentTag)
       else return this.failTag(tag, parentBuilder)
     } else if (
       this.parseChr(EQ) &&
@@ -507,19 +526,21 @@ class Parse {
             if (indents.count === this.indents[0]) {
               const start = this.pos
               this.next(indents.length)
-              const result = this.parseTag(TagScope.BlockAttribute, blockAttributes)
+              const result = this.parseTag(TagScope.BlockAttribute, blockAttributes, tag)
               if (!result) {
                 this.pos = start
                 break
               }
-              if (result === ParseTagResult.Finish) continue
+              if (result === ParseTagResult.Finish) {
+                this.skipNewline = false
+                continue
+              }
               failed = true
-              break
             }
+            break
           }
           this.addTagInnerBuilder(tag, blockAttributes)
           if (failed) return this.failTag(tag, parentBuilder)
-          if (blockAttributes.length) this.skipNewline = false
           let isMultiline = !!blockAttributes.length
           this.indents[0]--
           const start = this.pos
@@ -541,20 +562,18 @@ class Parse {
             if (this.pos > start) {
               isMultiline = true
               if (tag.type === Type.IndentTag) this.indents[0]++
-              if (isLiteral) contents.add(this.parseBraceLiteralText())
-              else {
-                while (
-                  contents.add(this.parseLineText()) ||
-                  this.parseTag(TagScope.Content, contents) ||
-                  this.parseMultilineDelimiter(contents)
-                ) {}
-              }
+              if (isLiteral) {
+                while (contents.add(this.parseLineLiteralText()) || this.parseMultilineDelimiter(contents)) {}
+              } else this.parseMultilineContents(contents, tag)
               this.addTagInnerBuilder(tag, contents)
-              return this.finishTag(tag, parentBuilder)
+              if (tag.type === Type.IndentTag) {
+                this.indents[0]--
+              }
+              return this.finishTag(tag, parentScope, parentBuilder, parentTag)
             }
           }
           if (isMultiline) {
-            const result = this.finishTag(tag, parentBuilder)
+            const result = this.finishTag(tag, parentScope, parentBuilder, parentTag)
             const indents = this.countNewlineIndents()
             if (indents.count === this.indents[0]) {
               const escape =
@@ -573,18 +592,36 @@ class Parse {
           this.parseChr(SP)
           this.addTagInnerBuilder(tag, new TreeBuilder(this.nodeSet, this.pos, Type.Contents))
           this.next(this.matchSpaces())
-          return this.finishTag(tag, parentBuilder)
+          return this.finishTag(tag, parentScope, parentBuilder, parentTag)
         } else {
           this.parseChr(SP)
           tag.type = Type.LineTag
           if (isLiteral) contents.add(this.parseLineLiteralText())
-          else while (contents.add(this.parseLineText()) || this.parseTag(TagScope.Content, contents)) {}
+          else while (contents.add(this.parseLineText()) || this.parseTag(TagScope.Content, contents, tag)) {}
           this.addTagInnerBuilder(tag, contents)
-          return this.finishTag(tag, parentBuilder)
+          return this.finishTag(tag, parentScope, parentBuilder, parentTag)
         }
       }
     }
     return this.failTag(tag, parentBuilder)
+  }
+
+  private parseMultilineContents(contents: TreeBuilder, tag?: TreeBuilder): void {
+    // The order used to be:
+    // 1. Contents loop parses a tag.
+    // 2. At the end of a loop iteration set skipNewline to false.
+    // 3. After parsing a tag, check if skipNewline should be set to true.
+    // Now 3 is part of 1, thus skipNewline would always be false.
+    let oldSkipNewline = this.skipNewline
+    while (
+      contents.add(this.parseLineText()) ||
+      this.parseTag(TagScope.Content, contents, tag) ||
+      this.parseMultilineDelimiter(contents)
+    ) {
+      if (this.skipNewline && oldSkipNewline) this.skipNewline = false
+      oldSkipNewline = this.skipNewline
+    }
+    this.skipNewline = false
   }
 
   private parseMultilineDelimiter(builder: TreeBuilder): boolean {
@@ -610,11 +647,7 @@ class Parse {
 
   public finish(): Tree {
     const topContents = new TreeBuilder(this.nodeSet, 0, Type.TopContents)
-    while (
-      topContents.add(this.parseLineText()) ||
-      this.parseTag(TagScope.Content, topContents) ||
-      this.parseMultilineDelimiter(topContents)
-    ) {}
+    this.parseMultilineContents(topContents)
     return topContents.toTree()
   }
 }
@@ -686,7 +719,7 @@ function traverseTag(cursor: TreeCursor, input: Input, isAttribute = false): Tag
 function traverseAttributes(cursor: TreeCursor, input: Input): Tag[] {
   const attributes: Tag[] = []
   cursor.firstChild()
-  while (cursor.type.is("Tag")) {
+  while (isTagNode(cursor)) {
     attributes.push(traverseTag(cursor, input, true))
     if (!cursor.nextSibling()) break
   }
@@ -707,7 +740,7 @@ function traverseContents(cursor: TreeCursor, input: Input): Content[] {
       text = (text || "") + input.read(from + +(input.get(from) === BS), to)
     } else if (type.id === Type.StopMarker) {
       text = text || ""
-    } else if (type.is("Tag")) {
+    } else if (isTagNode(type)) {
       if (text !== null) {
         contents.push(text)
         text = null

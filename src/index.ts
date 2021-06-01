@@ -2,6 +2,6 @@ export { Content, isContent, isContents, isTag, isTagContent, isText, isTextCont
 
 export { shakeContents, shakeTag, ShakenContent, ShakenTag, unshakeContents, unshakeTag } from "./shake"
 
-export { parseContents, parseTag, parser, TagdownParser } from "./parser"
+export { isMultilineTagNode, isTagNode, parseContents, parseTag, parser, TagdownParser, Type } from "./parser"
 
 export { printContents, printTag } from "./printer"

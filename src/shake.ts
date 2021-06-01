@@ -11,7 +11,7 @@ export type ShakenTag = {
 
 export type ShakenContent = string | ShakenTag
 
-export function shakeTag(tag: Tag, isAttribute: boolean): ShakenTag {
+export function shakeTag(tag: Tag, isAttribute = false): ShakenTag {
   const shakenTag = {} as ShakenTag
   if (tag.isQuoted) shakenTag.isQuoted = true
   if (tag.isAttribute && !isAttribute) shakenTag.isAttribute = true
@@ -26,12 +26,12 @@ export function shakeContents(contents: Content[]): ShakenContent[] {
   return contents.map(content => (isTagContent(content) ? shakeTag(content, false) : content))
 }
 
-export function unshakeTag(tag: ShakenTag): Tag {
+export function unshakeTag(tag: ShakenTag, isAttribute = false): Tag {
   return {
     isQuoted: !!tag.isQuoted,
-    isAttribute: !!tag.isAttribute,
+    isAttribute: isAttribute || !!tag.isAttribute,
     name: tag.name,
-    attributes: tag.attributes ? tag.attributes.map(unshakeTag) : [],
+    attributes: tag.attributes ? tag.attributes.map(attr => unshakeTag(attr, true)) : [],
     isLiteral: !!tag.isLiteral,
     contents: tag.contents ? unshakeContents(tag.contents) : [],
   }

@@ -1,5 +1,4 @@
-import { Input, NodeType, stringInput, Tree, TreeCursor } from "lezer-tree"
-import { log } from "./log"
+import { Input, NodeType, stringInput, SyntaxNode, Tree, TreeCursor } from "lezer-tree"
 
 enum Color {
   Red = 31,
@@ -19,11 +18,11 @@ function focusedNode(
 }
 
 export function printTree(
-  tree: Tree,
+  cursor: TreeCursor | Tree | SyntaxNode,
   input: Input | string,
   options: { from?: number; to?: number; start?: number; includeParents?: boolean } = {},
 ): string {
-  const cursor = tree.cursor()
+  if (!(cursor instanceof TreeCursor)) cursor = cursor instanceof Tree ? cursor.cursor() : cursor.cursor
   if (typeof input === "string") input = stringInput(input)
   const { from = -Infinity, to = Infinity, start = 0, includeParents = false } = options
   let output = ""
@@ -78,7 +77,7 @@ export function printTree(
 }
 
 export function logTree(
-  tree: Tree,
+  tree: TreeCursor | Tree | SyntaxNode,
   input: Input | string,
   options: { from?: number; to?: number; start?: number; includeParents?: boolean } = {},
 ): void {
