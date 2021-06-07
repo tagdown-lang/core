@@ -26,14 +26,24 @@ export function shakeContents(contents: Content[]): ShakenContent[] {
   return contents.map(content => (isTagContent(content) ? shakeTag(content, false) : content))
 }
 
-export function unshakeTag(tag: ShakenTag, isAttribute = false): Tag {
+export function unshakeTag(
+  {
+    isQuoted = false,
+    isAttribute = false,
+    name,
+    attributes = [],
+    isLiteral = false,
+    contents = [],
+  }: ShakenTag,
+  inAttributes = false,
+): Tag {
   return {
-    isQuoted: !!tag.isQuoted,
-    isAttribute: isAttribute || !!tag.isAttribute,
-    name: tag.name,
-    attributes: tag.attributes ? tag.attributes.map(attr => unshakeTag(attr, true)) : [],
-    isLiteral: !!tag.isLiteral,
-    contents: tag.contents ? unshakeContents(tag.contents) : [],
+    isQuoted,
+    isAttribute: inAttributes || isAttribute,
+    name,
+    attributes: attributes.map(attr => unshakeTag(attr, true)),
+    isLiteral,
+    contents: unshakeContents(contents),
   }
 }
 

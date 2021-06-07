@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Gulp",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/..",
+      "runtimeExecutable": "gulp",
+      "runtimeArgs": ["--project", "${workspaceFolderBasename}", "clean", "compile"]
+    }
+  ]
+}

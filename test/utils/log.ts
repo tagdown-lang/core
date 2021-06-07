@@ -1,16 +1,22 @@
-import * as _inspect from "browser-util-inspect"
+import * as inspect from "browser-util-inspect"
 
-import { Content, parseContents, printContents, shakeContents, Tag } from ".."
+import { Content, parseContents, printContents, shakeContents, Tag } from "../../src"
 
-export function inspect(arg: any): string {
-  return _inspect(arg, {
+function pretty(arg: any): string {
+  return inspect(arg, {
     depth: null,
     colors: true,
   })
 }
 
 export function log(...args: any[]): void {
-  console.log(...args.map(inspect))
+  console.log(...args.map(pretty))
+}
+
+export function logItem(arg: any, footer: string): void {
+  console.log(pretty(arg))
+  console.log(arg)
+  console.log("---------- ^ " + footer)
 }
 
 export function logParse(input: string): Content[] {

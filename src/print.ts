@@ -3,14 +3,12 @@ import { assert } from "./utils"
 
 // Types
 
-// The top-level contents can be considered to be both within brace and indent contents,
-// so they are defined as bit flags to allow for unions.
 export enum TagLayout {
-  Atom = "atom", // {name}
-  Brace = "brace", // {name: text}
-  Line = "line", // {name=} text
-  Indent = "indent", // {name=}\n: text
-  End = "end", // {name=}\n--\ntext
+  Atom, // {name}
+  Brace, // {name: text}
+  Line, // {name=} text
+  End, // {name=}\n--\ntext
+  Indent, // {name=}\n: text
 }
 
 interface PrintTag extends Tag {
@@ -35,20 +33,20 @@ function isLineTag(tag: PrintTag): boolean {
   return tag.layout === TagLayout.Line
 }
 
-function isIndentTag(tag: PrintTag): boolean {
-  return tag.layout === TagLayout.Indent
-}
-
 function isEndTag(tag: PrintTag): boolean {
   return tag.layout === TagLayout.End
+}
+
+function isIndentTag(tag: PrintTag): boolean {
+  return tag.layout === TagLayout.Indent
 }
 
 function isInlineTag(tag: PrintTag): boolean {
   return isAtomTag(tag) || isBraceTag(tag)
 }
 
-function isLinesTag(tag: PrintTag): boolean {
-  return isIndentTag(tag) || isEndTag(tag)
+function isMultilineTag(tag: PrintTag): boolean {
+  return isEndTag(tag) || isIndentTag(tag)
 }
 
 // Prepare
@@ -63,7 +61,7 @@ function prepareTag(tag: Tag): PrintTag {
 }
 
 function prepareContents(contents: Content[]): PrintContent[] {
-  return contents.map(content => (isTextContent(content) ? content : prepareTag(content)))
+  return contents.map(content => (isTagContent(content) ? prepareTag(content) : content))
 }
 
 // Layout
@@ -72,7 +70,7 @@ function layoutTag(tag: PrintTag): void {
   for (const attr of tag.attributes) layoutTag(attr)
   if (tag.attributes.length >= 3) {
     tag.layout = TagLayout.Indent
-  } else if (!isLinesTag(tag)) {
+  } else if (!isMultilineTag(tag)) {
     for (const attr of tag.attributes) {
       if (!isInlineTag(attr)) {
         tag.layout = TagLayout.Indent
@@ -81,7 +79,7 @@ function layoutTag(tag: PrintTag): void {
     }
   }
   layoutContents(tag.contents, tag)
-  if (isLinesTag(tag)) {
+  if (isMultilineTag(tag)) {
     for (const attr of tag.attributes) {
       if (isBraceTag(attr)) {
         attr.layout = TagLayout.Line
@@ -97,10 +95,10 @@ function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
   if (isTagContent(lastContent) && isIndentTag(lastContent)) {
     lastContent.layout = TagLayout.End
   }
-  if (!tag || isLinesTag(tag)) return
+  if (!tag || isMultilineTag(tag)) return
   let isPrevLineTag = false
   for (const content of contents) {
-    if (isPrevLineTag || (isTagContent(content) ? isLinesTag(content) : /\r?\n/.test(content))) {
+    if (isPrevLineTag || (isTagContent(content) ? isMultilineTag(content) : /\r?\n/.test(content))) {
       tag.layout = TagLayout.Indent
       return
     }
@@ -208,10 +206,10 @@ function escapeTagName(tag: PrintTag): string {
 function escapeTag(tag: PrintTag, indentLevel: number): void {
   tag.name = escapeTagName(tag)
   for (const attr of tag.attributes) escapeTag(attr, indentLevel)
-  escapeContents(tag.contents, tag, isIndentTag(tag) ? indentLevel + 1 : indentLevel)
+  escapeContents(tag.contents, isIndentTag(tag) ? indentLevel + 1 : indentLevel, tag)
 }
 
-function escapeContents(contents: PrintContent[], tag?: PrintTag, indentLevel = 0): void {
+function escapeContents(contents: PrintContent[], indentLevel: number, tag?: PrintTag): void {
   if (tag && tag.isLiteral) {
     contents[0] = escapeEmptyLines(contents[0] as string, indentLevel, true, tag)
   } else {
@@ -245,44 +243,44 @@ function outputTag(tag: PrintTag, indentLevel: number): string {
   if (tag.isAttribute) output += "@"
   output += tag.name
   const attrOutputs = tag.attributes.map(attr => outputTag(attr, indentLevel + 1))
-  if (!isLinesTag(tag)) {
+  if (!isMultilineTag(tag)) {
     output += attrOutputs.join("")
   }
   if (!isAtomTag(tag)) {
-    output += isInlineTag(tag) ? ":" : "="
+    output += isBraceTag(tag) ? ":" : "="
     if (tag.isLiteral) output += "'"
     if (isBraceTag(tag)) {
-      output += " " + outputContents(tag.contents, tag)
+      output += " " + outputContents(tag.contents, 0, tag)
     }
   }
   output += "}"
   if (isLineTag(tag)) {
-    output += " " + outputContents(tag.contents, tag, indentLevel)
-  } else if (isLinesTag(tag)) {
+    output += " " + outputContents(tag.contents, indentLevel, tag)
+  } else if (isMultilineTag(tag)) {
     const newLineIndent = "\n" + "  ".repeat(indentLevel)
     output += attrOutputs.map(output => newLineIndent + "  " + output).join("")
     if (tag.contents.length > 0) {
       output +=
         newLineIndent +
         (isIndentTag(tag) ? ": " : "--" + newLineIndent) +
-        outputContents(tag.contents, tag, isIndentTag(tag) ? indentLevel + 1 : indentLevel)
+        outputContents(tag.contents, isIndentTag(tag) ? indentLevel + 1 : indentLevel, tag)
     }
   }
   return output
 }
 
-function outputContents(contents: PrintContent[], tag?: PrintTag, indentLevel = 0): string {
+function outputContents(contents: PrintContent[], indentLevel: number, tag?: PrintTag): string {
   let output = ""
   for (let i = 0; i < contents.length; ++i) {
     const content = contents[i]
     if (isTextContent(content)) {
       output +=
-        tag && isLinesTag(tag) ? content.replace(/(\r?\n)/g, "$1" + "  ".repeat(indentLevel)) : content
+        tag && isMultilineTag(tag) ? content.replace(/(\r?\n)/g, "$1" + "  ".repeat(indentLevel)) : content
     } else {
       output += outputTag(content, indentLevel)
       if (!isInlineTag(content) && (i + 1 < contents.length || (tag && isBraceTag(tag)))) {
         output += "\n"
-        if (tag && isLinesTag(tag)) {
+        if (tag && isMultilineTag(tag)) {
           output += "  ".repeat(indentLevel)
         }
       }
@@ -293,18 +291,17 @@ function outputContents(contents: PrintContent[], tag?: PrintTag, indentLevel = 
 
 // Print
 
-export function printContents(contents: Content[]): string {
+export function printContents(contents: Content[], indentLevel = 0): string {
   const preparedContents = prepareContents(contents)
   layoutContents(preparedContents)
   assertContents(preparedContents)
-  escapeContents(preparedContents)
-  return outputContents(preparedContents)
+  escapeContents(preparedContents, indentLevel)
+  return outputContents(preparedContents, indentLevel)
 }
 
-export function printTag(tag: Tag): string {
-  const preparedTag = prepareTag(tag)
-  layoutTag(preparedTag)
-  assertTag(preparedTag)
-  escapeTag(preparedTag, 0)
-  return outputTag(preparedTag, 0)
+export function printTag(tag: Tag, indentLevel?: number): string {
+  // We cannot just immediately call the tag equivalents of contents,
+  // as some of the logic would not get to be applied.
+  // It really should just be considered contents with a single tag.
+  return printContents([tag], indentLevel)
 }

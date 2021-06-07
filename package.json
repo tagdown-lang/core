@@ -2,10 +2,10 @@
   "name": "tagdown",
   "version": "0.1.0",
   "license": "MIT",
-  "main": "out/index",
+  "main": "lib/index",
   "devDependencies": {
     "browser-util-inspect": "^0.2.0",
-    "fast-check": "https://60300bf150dc580a45751048--dazzling-goodall-4f0e38.netlify.app/fast-check.tgz",
+    "fast-check": "^2.15.0",
     "prettier": "^2.2.1",
     "ts-node": "^9.1.1",
     "typescript": "^4.1.3"

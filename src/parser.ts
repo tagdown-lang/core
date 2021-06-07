@@ -1,15 +1,4 @@
-import {
-  Input,
-  NodePropSource,
-  NodeSet,
-  NodeType,
-  stringInput,
-  Tree,
-  TreeBuffer,
-  TreeCursor,
-} from "lezer-tree"
-
-import { Content, isTagContent, Tag } from "./types"
+import { Input, NodePropSource, NodeSet, NodeType, stringInput, Tree, TreeBuffer } from "lezer-tree"
 
 // Needs to be exported, otherwise when using `Tree`, `NodeType` can only be inspected with `name`,
 // making it string typed. Exporting the enum makes it more type safe and easier to refactor.
@@ -20,7 +9,7 @@ export enum Type {
   TagError,
 
   // Tags
-  IndentTag,
+  IndentTag, // least requirements
   EndTag,
   LineTag,
   BraceTag,
@@ -28,9 +17,12 @@ export enum Type {
 
   // Tag
   TagMarker,
-  Flags,
+  IsQuoted,
+  IsAttribute,
   Name,
   InlineAttributes,
+  IsBlock,
+  IsLiteral,
   BlockAttributes,
   ContentsMarker,
   Contents,
@@ -41,19 +33,24 @@ export enum Type {
   Other,
 }
 
-type NodeTypeLike = number | NodeType | Tree | TreeBuffer | TreeCursor
-
-function toNodeTypeId(arg: NodeTypeLike): number {
-  return typeof arg === "number" ? arg : (arg instanceof NodeType ? arg : arg.type).id
+export function isTagType(type: number): boolean {
+  return [Type.IndentTag, Type.EndTag, Type.LineTag, Type.BraceTag, Type.AtomTag].includes(type)
 }
 
-export function isMultilineTagNode(arg: NodeTypeLike): boolean {
-  return [Type.IndentTag, Type.EndTag].includes(toNodeTypeId(arg))
+export function isBlockTagType(type: number): boolean {
+  return [Type.IndentTag, Type.EndTag, Type.LineTag].includes(type)
 }
 
-export function isTagNode(arg: NodeTypeLike): boolean {
-  const id = toNodeTypeId(arg)
-  return id in Type && Type[id].endsWith("Tag")
+export function isInlineTagType(type: number): boolean {
+  return [Type.BraceTag, Type.AtomTag].includes(type)
+}
+
+export function isMultilineTagType(type: number): boolean {
+  return [Type.IndentTag, Type.EndTag].includes(type)
+}
+
+export function isTextType(type: number): boolean {
+  return [Type.StopMarker, Type.Escape, Type.Other].includes(type)
 }
 
 const nodeTypes = [
@@ -73,9 +70,9 @@ for (let i = 3, name: string; (name = Type[i]); i++) {
 export class TagdownParser {
   constructor(readonly nodeSet: NodeSet) {}
 
-  parse(input: Input | string, startPos = 0): Tree {
+  parse(input: Input | string, indentLevel = 0): Tree {
     if (typeof input === "string") input = stringInput(input)
-    let parse = new Parse(this, input, startPos)
+    let parse = new Parse(this, input, indentLevel)
     return parse.finish()
   }
 
@@ -223,14 +220,13 @@ enum ParseTagResult {
 
 class Parse {
   readonly nodeSet: NodeSet
-  pos: number
-  indents: number[]
+  pos = 0
+  readonly indents: number[]
   skipNewline = false
 
-  constructor(parser: TagdownParser, readonly input: Input, start: number) {
+  constructor(parser: TagdownParser, readonly input: Input, indentLevel: number) {
     this.nodeSet = parser.nodeSet
-    this.pos = start
-    this.indents = [0]
+    this.indents = [indentLevel]
   }
 
   private next(count = 1): void {
@@ -415,13 +411,14 @@ class Parse {
     return this.sliceLineEnd(start)
   }
 
-  private parseTagEnd(tag: TagBuilder): boolean {
-    const cond = this.isChr(RB)
-    if (cond) {
-      tag.add(TreeLeaf.createFrom(Type.TagMarker, this.pos, 1))
-      this.next()
-    }
+  private parseMarker(container: TreeBuilder, chr: number, type: Type): boolean {
+    const cond = this.parseChr(chr)
+    if (cond) container.add(TreeLeaf.createTo(type, this.pos, 1))
     return cond
+  }
+
+  private parseTagEnd(tag: TreeBuilder): boolean {
+    return this.parseMarker(tag, RB, Type.TagMarker)
   }
 
   private finishTag(
@@ -450,13 +447,9 @@ class Parse {
     tag.add(TreeLeaf.createFrom(Type.TagMarker, this.pos, 1))
     this.next()
     this.next(this.matchSpaces())
-    let start = this.pos
-    this.parseChr(SQ)
-    this.parseChr(AT)
-    if (this.pos > start) {
-      tag.add(TreeLeaf.createRange(Type.Flags, start, this.pos))
-    }
-    start = this.pos
+    this.parseMarker(tag, SQ, Type.IsQuoted)
+    this.parseMarker(tag, AT, Type.IsAttribute)
+    const start = this.pos
     if (this.isAlpha()) {
       do {
         this.next()
@@ -468,7 +461,7 @@ class Parse {
         } while (this.isAlphanumeric())
       }
     }
-    if (this.pos === start) return ParseTagResult.None
+    if (this.pos === start) return this.failTag(tag, container)
     tag.add(TreeLeaf.createRange(Type.Name, start, this.pos))
     this.next(this.matchSpaces())
     const inlineAttributes = new TreeBuilder(this.nodeSet, this.pos, Type.InlineAttributes)
@@ -484,26 +477,24 @@ class Parse {
     if (failed) return this.failTag(tag, container)
     let isLiteral = false
     if (this.parseTagEnd(tag)) return this.finishTag(scope, container, tag, parentTag)
-    const contents = new TreeBuilder(this.nodeSet, this.pos, Type.Contents)
     if (this.parseChr(CO)) {
       tag.type = Type.BraceTag
       tag.add(TreeLeaf.createTo(Type.ContentsMarker, this.pos, 1))
-      if (this.parseChr(SQ)) {
-        isLiteral = true
-        tag.add(TreeLeaf.createTo(Type.Flags, this.pos, 1))
-      }
+      isLiteral = this.parseMarker(tag, SQ, Type.IsLiteral)
       this.parseChr(SP)
       this.indents.unshift(0)
+      const contents = new TreeBuilder(this.nodeSet, this.pos, Type.Contents)
       if (isLiteral) contents.add(this.parseBraceLiteralText())
       else while (contents.add(this.parseBraceText()) || this.parseTag(TagScope.Content, contents, tag)) {}
       tag.addContainer(contents)
       this.indents.shift()
       if (this.parseTagEnd(tag)) return this.finishTag(scope, container, tag, parentTag)
       else return this.failTag(tag, container)
-    } else if (this.parseChr(EQ) && (scope === TagScope.Content || scope === TagScope.BlockAttribute)) {
-      const start = this.pos - 1
-      if (this.parseChr(SQ)) isLiteral = true
-      tag.add(TreeLeaf.createRange(Type.Flags, start, this.pos))
+    } else if (
+      (scope === TagScope.Content || scope === TagScope.BlockAttribute) &&
+      this.parseMarker(tag, EQ, Type.IsBlock)
+    ) {
+      isLiteral = this.parseMarker(tag, SQ, Type.IsLiteral)
       this.next(this.matchSpaces())
       if (this.parseTagEnd(tag)) {
         const spaces = this.matchSpaces()
@@ -513,26 +504,24 @@ class Parse {
           const blockAttributes = new TreeBuilder(this.nodeSet, this.pos, Type.BlockAttributes)
           for (;;) {
             const indents = this.countNewlineIndents()
-            if (indents.count === this.indents[0]) {
-              const start = this.pos
-              this.next(indents.length)
-              const result = this.parseTag(TagScope.BlockAttribute, blockAttributes, tag)
-              if (!result) {
-                this.pos = start
-                break
-              }
-              if (result === ParseTagResult.Finish) {
-                this.skipNewline = false
-                continue
-              }
-              failed = true
+            if (indents.count !== this.indents[0]) break
+            const start = this.pos
+            this.next(indents.length)
+            const result = this.parseTag(TagScope.BlockAttribute, blockAttributes, tag)
+            if (!result) {
+              this.pos = start
+              break
             }
-            break
+            if (result === ParseTagResult.Fail) {
+              failed = true
+              break
+            }
+            this.skipNewline = false
           }
           tag.addContainer(blockAttributes)
+          this.indents[0]--
           if (failed) return this.failTag(tag, container)
           let isMultiline = !blockAttributes.isEmpty()
-          this.indents[0]--
           const start = this.pos
           let indents = this.countNewlineIndents()
           const { length } = indents
@@ -552,29 +541,29 @@ class Parse {
             if (this.pos > start) {
               isMultiline = true
               if (tag.type === Type.IndentTag) this.indents[0]++
+              const contents = new TreeBuilder(this.nodeSet, this.pos, Type.Contents)
               if (isLiteral) {
                 while (contents.add(this.parseLineLiteralText()) || this.parseMultilineDelimiter(contents)) {}
-              } else this.parseMultilineContents(contents, tag)
-              tag.addContainer(contents)
-              if (tag.type === Type.IndentTag) {
-                this.indents[0]--
+              } else {
+                this.parseMultilineContents(contents, tag)
               }
+              tag.addContainer(contents)
+              if (tag.type === Type.IndentTag) this.indents[0]--
               return this.finishTag(scope, container, tag, parentTag)
             }
           }
           if (isMultiline) {
             const result = this.finishTag(scope, container, tag, parentTag)
             const indents = this.countNewlineIndents()
-            if (indents.count === this.indents[0]) {
-              const escape =
-                this.matchStr([BS, CO], indents.length) || this.matchStr([BS, HY, HY], indents.length)
-              if (escape) {
-                this.next(indents.length + escape)
-                const text = new TextBuilder(this.nodeSet, this.pos)
-                text.add(TreeLeaf.createTo(Type.Escape, this.pos, escape))
-                container.add(text)
-                this.skipNewline = false
-              }
+            if (indents.count !== this.indents[0]) return result
+            const escape =
+              this.matchStr([BS, CO], indents.length) || this.matchStr([BS, HY, HY], indents.length)
+            if (escape) {
+              this.next(indents.length + escape)
+              const text = new TextBuilder(this.nodeSet, this.pos)
+              text.add(TreeLeaf.createTo(Type.Escape, this.pos, escape))
+              container.add(text)
+              this.skipNewline = false
             }
             return result
           }
@@ -586,6 +575,7 @@ class Parse {
         } else {
           this.parseChr(SP)
           tag.type = Type.LineTag
+          const contents = new TreeBuilder(this.nodeSet, this.pos, Type.Contents)
           if (isLiteral) contents.add(this.parseLineLiteralText())
           else while (contents.add(this.parseLineText()) || this.parseTag(TagScope.Content, contents, tag)) {}
           tag.addContainer(contents)
@@ -636,125 +626,8 @@ class Parse {
   }
 
   public finish(): Tree {
-    const topContents = new TreeBuilder(this.nodeSet, 0, Type.TopContents)
+    const topContents = new TreeBuilder(this.nodeSet, this.pos, Type.TopContents)
     this.parseMultilineContents(topContents)
     return topContents.toTree()
   }
-}
-
-// AST
-
-function sliceType(cursor: TreeCursor, input: Input, type: number): string | null {
-  if (cursor.type.id === type) {
-    const s = input.read(cursor.from, cursor.to)
-    cursor.nextSibling()
-    return s
-  }
-  return null
-}
-
-function sliceFlags(cursor: TreeCursor, input: Input): number[] {
-  const s = sliceType(cursor, input, Type.Flags)
-  return s !== null ? s.split("").map(c => c.charCodeAt(0)) : []
-}
-
-function traverseTag(cursor: TreeCursor, input: Input, isAttribute = false): Tag {
-  const tagType = cursor.type.id
-  cursor.firstChild()
-  cursor.nextSibling()
-  const tagFlags = sliceFlags(cursor, input)
-  const isQuoted = tagFlags.includes(SQ)
-  isAttribute = isAttribute || tagFlags.includes(AT)
-  const name = sliceType(cursor, input, Type.Name)!
-  const attributes: Tag[] = []
-  if (cursor.type.id === Type.InlineAttributes) {
-    attributes.push(...traverseAttributes(cursor, input))
-  }
-  let isLiteral = false
-  if (tagType === Type.EndTag || tagType === Type.IndentTag || tagType === Type.LineTag) {
-    const contentFlags = sliceFlags(cursor, input)
-    if (contentFlags.includes(SQ)) isLiteral = true
-    cursor.nextSibling()
-  }
-  if (tagType === Type.EndTag || tagType === Type.IndentTag) {
-    if (cursor.type.id === Type.BlockAttributes) {
-      attributes.push(...traverseAttributes(cursor, input))
-    }
-    if (cursor.type.id === Type.ContentsMarker) {
-      cursor.nextSibling()
-    }
-  } else if (tagType === Type.BraceTag) {
-    cursor.nextSibling()
-    const contentFlags = sliceFlags(cursor, input)
-    if (contentFlags.includes(SQ)) isLiteral = true
-  }
-  let contents: Content[]
-  if (cursor.type.id === Type.Contents) {
-    contents = traverseContents(cursor, input)
-    if (contents.length === 0) contents.push("")
-  } else {
-    contents = []
-  }
-  cursor.parent()
-  return {
-    isQuoted,
-    isAttribute,
-    name,
-    attributes,
-    isLiteral,
-    contents,
-  }
-}
-
-function traverseAttributes(cursor: TreeCursor, input: Input): Tag[] {
-  const attributes: Tag[] = []
-  cursor.firstChild()
-  while (isTagNode(cursor)) {
-    attributes.push(traverseTag(cursor, input, true))
-    if (!cursor.nextSibling()) break
-  }
-  cursor.parent()
-  cursor.nextSibling()
-  return attributes
-}
-
-function traverseContents(cursor: TreeCursor, input: Input): Content[] {
-  if (!cursor.firstChild()) return []
-  const contents: Content[] = []
-  let text: string | null = null
-  do {
-    const { type, from, to } = cursor
-    if (type.id === Type.Other || type.id === Type.TagError) {
-      text = (text || "") + input.read(from, to)
-    } else if (type.id === Type.Escape) {
-      text = (text || "") + input.read(from + +(input.get(from) === BS), to)
-    } else if (type.id === Type.StopMarker) {
-      text = text || ""
-    } else if (isTagNode(type)) {
-      if (text !== null) {
-        contents.push(text)
-        text = null
-      }
-      contents.push(traverseTag(cursor, input))
-    }
-  } while (cursor.nextSibling())
-  if (text !== null) contents.push(text)
-  cursor.parent()
-  return contents
-}
-
-export function parseTreeToContents(tree: Tree, input: Input | string): Content[] {
-  if (typeof input === "string") input = stringInput(input)
-  const cursor = tree.cursor()
-  return traverseContents(cursor, input)
-}
-
-export function parseContents(input: string): Content[] {
-  return parseTreeToContents(parser.parse(input), input)
-}
-
-export function parseTag(input: string): Tag | undefined {
-  const contents = parseContents(input)
-  if (contents.length === 1 && isTagContent(contents[0])) return contents[0]
-  return
 }
