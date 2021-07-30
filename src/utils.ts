@@ -1,4 +1,14 @@
-export function isObject(arg: any): arg is Object {
+type Primitive = bigint | boolean | null | number | string | symbol | undefined
+
+type JSONValue = Primitive | JSONObject | JSONArray
+
+interface JSONObject {
+  [key: string]: JSONValue
+}
+
+interface JSONArray extends Array<JSONValue> {}
+
+export function isJSONObject(arg: any): arg is JSONObject {
   return typeof arg === "object" && arg !== null && Object.getPrototypeOf(arg) === Object.prototype
 }
 

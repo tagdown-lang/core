@@ -1,6 +1,26 @@
-export { Content, isContent, isContents, isTag, isTagContent, isText, isTextContent, Tag } from "./types"
+export {
+  Content,
+  isContent,
+  isContents,
+  isTag,
+  isTagContent,
+  isTagContents,
+  isText,
+  isTextContent,
+  isTextContents,
+  Tag,
+} from "./types"
 
-export { shakeContents, ShakenContent, ShakenTag, shakeTag, unshakeContents, unshakeTag } from "./shake"
+export {
+  isShakenTagContent,
+  isShakenTextContent,
+  shakeContents,
+  ShakenContent,
+  ShakenTag,
+  shakeTag,
+  unshakeContents,
+  unshakeTag,
+} from "./shake"
 
 export {
   isBlockTagType,
@@ -20,3 +40,5 @@ export { convertTreeToContents, parseContents, parseTag, parseTree } from "./par
 export { printContents, printTag } from "./print"
 
 export { prettyprint, prettyprintTree } from "./prettyprint"
+
+export { isJSONObject } from "./utils"

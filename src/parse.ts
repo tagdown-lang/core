@@ -1,8 +1,8 @@
 import { Input, stringInput, Tree, TreeCursor } from "lezer-tree"
 
-import { isMultilineTagType, isTagType, parser, Type } from "./parser"
 import { isMarkerType, sliceType } from "./lezer"
-import { Content, isTagContent, Tag } from "./types"
+import { isMultilineTagType, isTagType, parser, Type } from "./parser"
+import { Content, isTagContents, Tag } from "./types"
 
 function convertAttributes(cursor: TreeCursor, input: Input): Tag[] {
   const attributes: Tag[] = []
@@ -97,6 +97,6 @@ export function parseContents(input: string, indentLevel?: number): Content[] {
 
 export function parseTag(input: string): Tag | null {
   const contents = parseContents(input)
-  if (contents.length === 1 && isTagContent(contents[0])) return contents[0]
+  if (isTagContents(contents)) return contents[0]
   return null
 }

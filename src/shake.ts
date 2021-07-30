@@ -1,4 +1,5 @@
-import { Content, isTagContent, Tag } from "./types"
+import { Content, isTagContent, isText, Tag } from "./types"
+import { isJSONObject } from "./utils"
 
 export type ShakenTag = {
   isQuoted?: boolean
@@ -49,4 +50,12 @@ export function unshakeTag(
 
 export function unshakeContents(contents: ShakenContent[]): Content[] {
   return contents.map(content => (typeof content === "object" ? unshakeTag(content) : content))
+}
+
+export function isShakenTextContent(content: ShakenContent): content is string {
+  return isText(content)
+}
+
+export function isShakenTagContent(content: ShakenContent): content is ShakenTag {
+  return isJSONObject(content)
 }

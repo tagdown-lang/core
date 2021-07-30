@@ -1,8 +1,8 @@
 import { Input, stringInput, Tree, TreeCursor } from "lezer-tree"
 
+import { isMarkerType, sliceType } from "./lezer"
 import { parseTree } from "./parse"
 import { isInlineTagType, isMultilineTagType, isTagType, isTextType, Type } from "./parser"
-import { isMarkerType, sliceType } from "./lezer"
 
 function outputAttributes(cursor: TreeCursor, input: Input, indentLevel: number): string[] {
   const outputs: string[] = []

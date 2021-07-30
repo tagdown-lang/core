@@ -1,4 +1,4 @@
-import { isObject } from "./utils"
+import { isJSONObject } from "./utils"
 
 // Types
 
@@ -44,7 +44,7 @@ export function isText(arg: any): arg is string {
 
 export function isTag(arg: any): arg is Tag {
   return (
-    isObject(arg) &&
+    isJSONObject(arg) &&
     typeof arg.isQuoted === "boolean" &&
     typeof arg.isAttribute === "boolean" &&
     typeof arg.name === "string" &&
@@ -69,5 +69,13 @@ export function isTextContent(content: Content): content is string {
 }
 
 export function isTagContent(content: Content): content is Tag {
-  return isObject(content)
+  return isJSONObject(content)
+}
+
+export function isTextContents(contents: Content[]): contents is string[] {
+  return contents.length === 1 && isTextContent(contents[0])
+}
+
+export function isTagContents(contents: Content[]): contents is Tag[] {
+  return contents.length === 1 && isTagContent(contents[0])
 }
