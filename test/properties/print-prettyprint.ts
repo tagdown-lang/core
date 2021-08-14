@@ -1,6 +1,6 @@
 import { prettyprint, printContents } from "../../src"
 import { assertProperty, contentsArb } from "../properties"
-import { log, logItem } from "../utils/log"
+import { logItem } from "../utils/log"
 
 assertProperty(
   contentsArb(5),

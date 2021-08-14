@@ -3,7 +3,7 @@ import * as fc from "fast-check"
 import { parseTree, prettyprint, printContents } from "../../src"
 import { validateTree } from "../../src/lezer"
 import { assertProperty, contentsArb } from "../properties"
-import { log, logItem } from "../utils/log"
+import { logItem } from "../utils/log"
 
 // Checks whether we are lossless when dealing with invalid input.
 assertProperty(
