@@ -1,6 +1,7 @@
 import * as fc from "fast-check"
 
 import { Content, isTagContent, Tag } from "../src"
+import { isTextContents } from "../src/types"
 
 function joinTexts(contents: Content[]): Content[] {
   return contents.reduceRight((contents, content) => {
@@ -56,7 +57,7 @@ export const tagArb: fc.Memo<Tag> = fc.memo(n =>
     })
     .map(tag => ({
       ...tag,
-      isLiteral: tag.isLiteral && tag.contents.length === 1 && typeof tag.contents[0] === "string",
+      isLiteral: tag.isLiteral && isTextContents(tag.contents),
     })),
 )
 
