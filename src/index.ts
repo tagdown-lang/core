@@ -33,7 +33,7 @@ export {
   Type,
 } from "./parser"
 
-export { CursorNode, isMarkerType, sliceType, traverseTree, TreeTraversal } from "./lezer"
+export { CursorNode, isType, sliceType, traverseTree, TreeTraversal } from "./lezer"
 
 export { convertTreeToContents, parseContents, parseTag, parseTree } from "./parse"
 

@@ -7,8 +7,8 @@ export enum TagLayout {
   Atom, // {name}
   Brace, // {name: text}
   Line, // {name=} text
-  End, // {name=}\n--\ntext
-  Indent, // {name=}\n: text
+  End, // {name#}\n--\ntext
+  Indent, // {name#}\n: text
 }
 
 interface PrintTag extends Tag {
@@ -192,16 +192,7 @@ function escapeEmptyLines(text: string, indentLevel: number, isLastContent: bool
   return newText
 }
 
-function escapeTagName(tag: PrintTag): string {
-  let name = tag.name.replace(/^(['@])/, "\\$1").replace(/([\\{}:])/g, "\\$1")
-  if (isAtomTag(tag) && tag.attributes.length === 0) {
-    name = name.replace(/(='?)$/, "\\$1")
-  }
-  return name
-}
-
 function escapeTag(tag: PrintTag, indentLevel: number): void {
-  tag.name = escapeTagName(tag)
   for (const attr of tag.attributes) escapeTag(attr, indentLevel)
   escapeContents(tag.contents, isIndentTag(tag) ? indentLevel + 1 : indentLevel, tag)
 }
@@ -244,11 +235,9 @@ function outputTag(tag: PrintTag, indentLevel: number): string {
     output += attrOutputs.join("")
   }
   if (!isAtomTag(tag)) {
-    output += isBraceTag(tag) ? ":" : "="
+    output += isMultilineTag(tag) ? "#" : isLineTag(tag) ? "=" : ":"
     if (tag.isLiteral) output += "'"
-    if (isBraceTag(tag)) {
-      output += " " + outputContents(tag.contents, 0, tag)
-    }
+    if (isBraceTag(tag)) output += " " + outputContents(tag.contents, 0, tag)
   }
   output += "}"
   if (isLineTag(tag)) {

@@ -1,6 +1,6 @@
 import { Input, stringInput, Tree, TreeCursor } from "lezer-tree"
 
-import { isMarkerType, sliceType } from "./lezer"
+import { isType, sliceType } from "./lezer"
 import { isMultilineTagType, isTagType, parser, Type } from "./parser"
 import { Content, isTagContents, Tag } from "./types"
 
@@ -20,22 +20,22 @@ function convertTag(cursor: TreeCursor, input: Input, isAttribute = false): Tag 
   const tagType = cursor.type.id
   cursor.firstChild()
   cursor.nextSibling()
-  const isQuoted = isMarkerType(cursor, Type.IsQuoted)
-  isAttribute = isMarkerType(cursor, Type.IsAttribute) || isAttribute
+  const isQuoted = isType(cursor, Type.IsQuoted)
+  isAttribute = isType(cursor, Type.IsAttribute) || isAttribute
   const name = sliceType(cursor, input, Type.Name)!
   const attributes: Tag[] = []
   if (cursor.type.id === Type.InlineAttributes) attributes.push(...convertAttributes(cursor, input))
   let isLiteral = false
-  if (isMarkerType(cursor, Type.IsBlock)) {
-    isLiteral = isMarkerType(cursor, Type.IsLiteral)
+  if (isType(cursor, Type.IsMultiline) || isType(cursor, Type.IsLine)) {
+    isLiteral = isType(cursor, Type.IsLiteral)
     cursor.nextSibling()
   }
   if (isMultilineTagType(tagType)) {
-    if (cursor.type.id === Type.BlockAttributes) attributes.push(...convertAttributes(cursor, input))
+    if (cursor.type.id === Type.MultilineAttributes) attributes.push(...convertAttributes(cursor, input))
     if (cursor.type.id === Type.ContentsMarker) cursor.nextSibling()
   } else if (tagType === Type.BraceTag) {
     cursor.nextSibling()
-    isLiteral = isMarkerType(cursor, Type.IsLiteral)
+    isLiteral = isType(cursor, Type.IsLiteral)
   }
   let contents: Content[]
   if (cursor.type.id === Type.Contents) {

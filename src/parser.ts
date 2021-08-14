@@ -21,9 +21,10 @@ export enum Type {
   IsAttribute,
   Name,
   InlineAttributes,
-  IsBlock,
+  IsLine,
+  IsMultiline,
   IsLiteral,
-  BlockAttributes,
+  MultilineAttributes,
   ContentsMarker,
   Contents,
 
@@ -192,6 +193,7 @@ const CO = 58
 const CR = 13
 const DO = 36
 const EQ = 61
+const HA = 35
 const HT = 9
 const HY = 45
 const LB = 123
@@ -208,7 +210,7 @@ const _z = 122
 
 enum TagScope {
   InlineAttribute,
-  BlockAttribute,
+  MultilineAttribute,
   Content,
 }
 
@@ -477,9 +479,8 @@ class Parse {
     if (failed) return this.failTag(tag, container)
     let isLiteral = false
     if (this.parseTagEnd(tag)) return this.finishTag(scope, container, tag, parentTag)
-    if (this.parseChr(CO)) {
+    if (this.parseMarker(tag, CO, Type.ContentsMarker)) {
       tag.type = Type.BraceTag
-      tag.add(TreeLeaf.createTo(Type.ContentsMarker, this.pos, 1))
       isLiteral = this.parseMarker(tag, SQ, Type.IsLiteral)
       this.parseChr(SP)
       this.indents.unshift(0)
@@ -490,24 +491,32 @@ class Parse {
       this.indents.shift()
       if (this.parseTagEnd(tag)) return this.finishTag(scope, container, tag, parentTag)
       else return this.failTag(tag, container)
-    } else if (
-      (scope === TagScope.Content || scope === TagScope.BlockAttribute) &&
-      this.parseMarker(tag, EQ, Type.IsBlock)
-    ) {
-      isLiteral = this.parseMarker(tag, SQ, Type.IsLiteral)
-      this.next(this.matchSpaces())
-      if (this.parseTagEnd(tag)) {
-        const spaces = this.matchSpaces()
-        if (this.matchNewline(spaces)) {
-          tag.type = Type.EndTag
+    } else if (scope === TagScope.Content || scope === TagScope.MultilineAttribute) {
+      if (this.parseMarker(tag, EQ, Type.IsLine)) {
+        tag.type = Type.LineTag
+        isLiteral = this.parseMarker(tag, SQ, Type.IsLiteral)
+        this.next(this.matchSpaces())
+        if (this.parseTagEnd(tag)) {
+          this.parseChr(SP)
+          const contents = new TreeBuilder(this.nodeSet, this.pos, Type.Contents)
+          if (isLiteral) contents.add(this.parseLineLiteralText())
+          else while (contents.add(this.parseLineText()) || this.parseTag(TagScope.Content, contents, tag)) {}
+          tag.addContainer(contents)
+          return this.finishTag(scope, container, tag, parentTag)
+        }
+      } else if (this.parseMarker(tag, HA, Type.IsMultiline)) {
+        tag.type = Type.EndTag
+        isLiteral = this.parseMarker(tag, SQ, Type.IsLiteral)
+        this.next(this.matchSpaces())
+        if (this.parseTagEnd(tag) && this.matchNewline(this.matchSpaces())) {
           this.indents[0]++
-          const blockAttributes = new TreeBuilder(this.nodeSet, this.pos, Type.BlockAttributes)
+          const multilineAttributes = new TreeBuilder(this.nodeSet, this.pos, Type.MultilineAttributes)
           for (;;) {
             const indents = this.countNewlineIndents()
             if (indents.count !== this.indents[0]) break
             const start = this.pos
             this.next(indents.length)
-            const result = this.parseTag(TagScope.BlockAttribute, blockAttributes, tag)
+            const result = this.parseTag(TagScope.MultilineAttribute, multilineAttributes, tag)
             if (!result) {
               this.pos = start
               break
@@ -518,10 +527,9 @@ class Parse {
             }
             this.skipNewline = false
           }
-          tag.addContainer(blockAttributes)
+          tag.addContainer(multilineAttributes)
           this.indents[0]--
           if (failed) return this.failTag(tag, container)
-          let isMultiline = !blockAttributes.isEmpty()
           const start = this.pos
           let indents = this.countNewlineIndents()
           const { length } = indents
@@ -539,7 +547,6 @@ class Parse {
               this.parseChr(SP)
             }
             if (this.pos > start) {
-              isMultiline = true
               if (tag.type === Type.IndentTag) this.indents[0]++
               const contents = new TreeBuilder(this.nodeSet, this.pos, Type.Contents)
               if (isLiteral) {
@@ -552,34 +559,19 @@ class Parse {
               return this.finishTag(scope, container, tag, parentTag)
             }
           }
-          if (isMultiline) {
-            const result = this.finishTag(scope, container, tag, parentTag)
-            const indents = this.countNewlineIndents()
-            if (indents.count !== this.indents[0]) return result
-            const escape =
-              this.matchStr([BS, CO], indents.length) || this.matchStr([BS, HY, HY], indents.length)
-            if (escape) {
-              this.next(indents.length + escape)
-              const text = new TextBuilder(this.nodeSet, this.pos)
-              text.add(TreeLeaf.createTo(Type.Escape, this.pos, escape))
-              container.add(text)
-              this.skipNewline = false
-            }
-            return result
+          const result = this.finishTag(scope, container, tag, parentTag)
+          indents = this.countNewlineIndents()
+          if (indents.count !== this.indents[0]) return result
+          const escape =
+            this.matchStr([BS, CO], indents.length) || this.matchStr([BS, HY, HY], indents.length)
+          if (escape) {
+            this.next(indents.length + escape)
+            const text = new TextBuilder(this.nodeSet, this.pos)
+            text.add(TreeLeaf.createTo(Type.Escape, this.pos, escape))
+            container.add(text)
+            this.skipNewline = false
           }
-          tag.type = Type.LineTag
-          this.parseChr(SP)
-          tag.addContainer(new TreeBuilder(this.nodeSet, this.pos, Type.Contents))
-          this.next(this.matchSpaces())
-          return this.finishTag(scope, container, tag, parentTag)
-        } else {
-          this.parseChr(SP)
-          tag.type = Type.LineTag
-          const contents = new TreeBuilder(this.nodeSet, this.pos, Type.Contents)
-          if (isLiteral) contents.add(this.parseLineLiteralText())
-          else while (contents.add(this.parseLineText()) || this.parseTag(TagScope.Content, contents, tag)) {}
-          tag.addContainer(contents)
-          return this.finishTag(scope, container, tag, parentTag)
+          return result
         }
       }
     }

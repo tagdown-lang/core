@@ -1,6 +1,6 @@
 import { Input, stringInput, Tree, TreeCursor } from "lezer-tree"
 
-import { isMarkerType, sliceType } from "./lezer"
+import { isType, sliceType } from "./lezer"
 import { parseTree } from "./parse"
 import { isInlineTagType, isMultilineTagType, isTagType, isTextType, Type } from "./parser"
 
@@ -21,25 +21,30 @@ function outputTag(cursor: TreeCursor, input: Input, indentLevel: number, isAttr
   cursor.firstChild()
   cursor.nextSibling()
   let output = "{"
-  if (isMarkerType(cursor, Type.IsQuoted)) output += "'"
-  if (isMarkerType(cursor, Type.IsAttribute) || isAttribute) output += "@"
+  if (isType(cursor, Type.IsQuoted)) output += "'"
+  if (isType(cursor, Type.IsAttribute) || isAttribute) output += "@"
   output += sliceType(cursor, input, Type.Name)!
   if (cursor.type.id === Type.InlineAttributes) {
     output += outputAttributes(cursor, input, indentLevel).join("")
   }
-  if (isMarkerType(cursor, Type.IsBlock) || tagType === Type.BraceTag) {
-    if (tagType === Type.BraceTag) cursor.nextSibling()
-    output += tagType === Type.BraceTag ? ":" : "="
-    if (isMarkerType(cursor, Type.IsLiteral)) output += "'"
-    if (tagType === Type.BraceTag) output += " " + outputContents(cursor, input, tagType)
-    else cursor.nextSibling()
+  const isMultiline = isType(cursor, Type.IsMultiline)
+  if (isMultiline || isType(cursor, Type.IsLine)) {
+    output += isMultiline ? "#" : "="
+    if (isType(cursor, Type.IsLiteral)) output += "'"
+    cursor.nextSibling()
+  }
+  if (tagType === Type.BraceTag) {
+    cursor.nextSibling()
+    output += ":"
+    if (isType(cursor, Type.IsLiteral)) output += "'"
+    output += " " + outputContents(cursor, input, tagType)
   }
   output += "}"
   if (tagType === Type.LineTag) {
     output += " " + outputContents(cursor, input, tagType, indentLevel)
   } else if (isMultilineTagType(tagType)) {
     const newLineIndent = "\n" + "  ".repeat(indentLevel)
-    if (cursor.type.id === Type.BlockAttributes) {
+    if (cursor.type.id === Type.MultilineAttributes) {
       output += outputAttributes(cursor, input, indentLevel)
         .map(output => newLineIndent + "  " + output)
         .join("")

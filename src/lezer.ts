@@ -9,7 +9,7 @@ export function sliceType(cursor: TreeCursor, input: Input, type: number): strin
   return null
 }
 
-export function isMarkerType(cursor: TreeCursor, type: number): boolean {
+export function isType(cursor: TreeCursor, type: number): boolean {
   const cond = cursor.type.id === type
   if (cond) cursor.nextSibling()
   return cond
