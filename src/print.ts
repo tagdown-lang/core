@@ -1,4 +1,4 @@
-import { Content, isTagContent, isTagContents, isTextContent, Tag } from "./types"
+import { Content, isTagContent, isTextContent, isTextContents, Tag } from "./types"
 import { assert } from "./utils"
 
 // Types
@@ -149,7 +149,7 @@ function assertTag(tag: PrintTag): void {
   tag.attributes.forEach(assertTag)
   if (tag.isLiteral) {
     assert(!isAtomTag(tag), "literals must not be atom tags")
-    assert(isTagContents(tag.contents), "literals must have a single text as contents")
+    assert(isTextContents(tag.contents), "literals must have a single text as contents")
   }
   assertContents(tag.contents)
 }
