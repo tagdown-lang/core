@@ -36,18 +36,23 @@ type TreeTraversalOptions = {
 export function traverseTree(
   cursor: TreeCursor | Tree | SyntaxNode,
   input: Input | string,
-  options: TreeTraversalOptions,
+  {
+    from = -Infinity,
+    to = Infinity,
+    includeParents = false,
+    beforeEnter,
+    onEnter,
+    onLeave,
+  }: TreeTraversalOptions,
 ): void {
   if (!(cursor instanceof TreeCursor)) cursor = cursor instanceof Tree ? cursor.cursor() : cursor.cursor
   if (typeof input === "string") input = stringInput(input)
-  const { from = -Infinity, to = Infinity, includeParents = false, beforeEnter, onEnter, onLeave } = options
   for (;;) {
     let node = cursorNode(cursor)
     let leave = false
     if (node.from <= to && node.to >= from) {
       const enter = !node.type.isAnonymous && (includeParents || (node.from >= from && node.to <= to))
-      let value // defaults to undefined
-      if (enter && beforeEnter) value = beforeEnter(cursor)
+      if (enter && beforeEnter) beforeEnter(cursor)
       node.isLeaf = !cursor.firstChild()
       if (enter) {
         leave = true
