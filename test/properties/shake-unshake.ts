@@ -1,6 +1,6 @@
 import { isEqualTag, shakeTag, unshakeTag } from "../../src"
-import { assertProperty, tagArb } from "../properties"
-import { logPrint } from "../utils/log"
+import { logPrint } from "../../src/test/log"
+import { assertProperty, tagArb } from "../../src/test/property"
 
 assertProperty(
   tagArb(5),

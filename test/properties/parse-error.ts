@@ -1,9 +1,8 @@
 import * as fc from "fast-check"
 
-import { parseTree, prettyprint, printContents } from "../../src"
-import { validateTree } from "../../src/lezer"
-import { assertProperty, contentsArb } from "../properties"
-import { logItem } from "../utils/log"
+import { parseTree, prettyprint, printContents, validateTree } from "../../src"
+import { logItem } from "../../src/test/log"
+import { assertProperty, contentsArb } from "../../src/test/property"
 
 // Checks whether we are lossless when dealing with invalid input.
 assertProperty(

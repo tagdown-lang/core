@@ -1,6 +1,6 @@
 import { parseContents, printContents } from "../../src"
-import { assertProperty, contentsArb } from "../properties"
-import { logPrint } from "../utils/log"
+import { logPrint } from "../../src/test/log"
+import { assertProperty, contentsArb } from "../../src/test/property"
 
 assertProperty(
   contentsArb(5),

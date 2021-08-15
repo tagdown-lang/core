@@ -1,7 +1,6 @@
 import * as fc from "fast-check"
 
-import { Content, isTagContent, Tag } from "../src"
-import { isTextContents } from "../src/types"
+import { Content, isTagContent, isTextContents, Tag } from "../types"
 
 function joinTexts(contents: Content[]): Content[] {
   return contents.reduceRight((contents, content) => {

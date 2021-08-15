@@ -1,7 +1,6 @@
 import { Input, stringInput, SyntaxNode, Tree, TreeCursor } from "lezer-tree"
 
-import { traverseTree } from "../../src"
-import { validatorTraversal } from "../../src/lezer"
+import { traverseTree, validatorTraversal } from "../lezer"
 
 enum Color {
   Red = 31,
@@ -13,15 +12,12 @@ function colorize(value: any, color: number): string {
   return "\u001b[" + color + "m" + String(value) + "\u001b[39m"
 }
 
+type PrintTreeOptions = { from?: number; to?: number; start?: number; includeParents?: boolean }
+
 export function printTree(
   cursor: TreeCursor | Tree | SyntaxNode,
   inputOrString: Input | string,
-  {
-    from,
-    to,
-    start = 0,
-    includeParents,
-  }: { from?: number; to?: number; start?: number; includeParents?: boolean } = {},
+  { from, to, start = 0, includeParents }: PrintTreeOptions = {},
 ): string {
   const input = typeof inputOrString === "string" ? stringInput(inputOrString) : inputOrString
   const state = {
@@ -77,7 +73,7 @@ export function printTree(
 export function logTree(
   tree: TreeCursor | Tree | SyntaxNode,
   input: Input | string,
-  options?: { from?: number; to?: number; start?: number; includeParents?: boolean },
+  options?: PrintTreeOptions,
 ): void {
   console.log(printTree(tree, input, options))
 }
