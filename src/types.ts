@@ -78,3 +78,31 @@ export function isTextContents(contents: Content[]): contents is string[] {
 export function isTagContents(contents: Content[]): contents is Tag[] {
   return contents.length === 1 && isTagContent(contents[0])
 }
+
+export function isEqualTag(tag1: Tag, tag2: Tag): boolean {
+  if (
+    !(
+      tag1.isQuoted === tag2.isQuoted &&
+      tag1.isAttribute === tag2.isAttribute &&
+      tag1.name === tag2.name &&
+      tag1.attributes.length === tag2.attributes.length &&
+      tag1.isLiteral === tag2.isLiteral &&
+      tag1.contents.length === tag2.contents.length
+    )
+  ) {
+    return false
+  }
+  for (let i = 0; i < tag1.attributes.length; i++) {
+    if (!isEqualTag(tag1.attributes[i], tag2.attributes[i])) return false
+  }
+  for (let i = 0; i < tag1.contents.length; i++) {
+    if (
+      !(typeof tag1.contents[i] === typeof tag2.contents[i] && typeof tag1.contents[i] === "string"
+        ? tag1.contents[i] === tag2.contents[i]
+        : isEqualTag(tag1.contents[i] as Tag, tag2.contents[i] as Tag))
+    ) {
+      return false
+    }
+  }
+  return true
+}

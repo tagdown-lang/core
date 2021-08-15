@@ -2,6 +2,7 @@ export {
   Content,
   isContent,
   isContents,
+  isEqualTag,
   isTag,
   isTagContent,
   isTagContents,
