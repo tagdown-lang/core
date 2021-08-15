@@ -40,5 +40,3 @@ export { convertTreeToContents, parseContents, parseTag, parseTree } from "./par
 export { printContents, printTag } from "./print"
 
 export { prettyprint, prettyprintTree } from "./prettyprint"
-
-export { isJSONObject } from "./utils"

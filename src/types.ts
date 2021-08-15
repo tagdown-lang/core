@@ -1,5 +1,3 @@
-import { isJSONObject } from "./utils"
-
 // Types
 
 // The tag represents structure within the language,
@@ -44,7 +42,8 @@ export function isText(arg: any): arg is string {
 
 export function isTag(arg: any): arg is Tag {
   return (
-    isJSONObject(arg) &&
+    typeof arg === "object" &&
+    arg !== null &&
     typeof arg.isQuoted === "boolean" &&
     typeof arg.isAttribute === "boolean" &&
     typeof arg.name === "string" &&
@@ -65,11 +64,11 @@ export function isContents(arg: any): arg is Content[] {
 }
 
 export function isTextContent(content: Content): content is string {
-  return isText(content)
+  return typeof content === "string"
 }
 
 export function isTagContent(content: Content): content is Tag {
-  return isJSONObject(content)
+  return typeof content === "object"
 }
 
 export function isTextContents(contents: Content[]): contents is string[] {
