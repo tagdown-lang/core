@@ -2,7 +2,7 @@ import { Input, stringInput, Tree, TreeCursor } from "lezer-tree"
 
 import { isType, sliceType } from "./lezer"
 import { isMultilineTagType, isTagType, parser, Type } from "./parser"
-import { Content, isTagContents, Tag } from "./types"
+import { Content, isTagContents, Tag, TagLayout } from "./types"
 
 function convertAttributes(cursor: TreeCursor, input: Input): Tag[] {
   const attributes: Tag[] = []
@@ -18,6 +18,7 @@ function convertAttributes(cursor: TreeCursor, input: Input): Tag[] {
 
 function convertTag(cursor: TreeCursor, input: Input, isAttribute = false): Tag {
   const tagType = cursor.type.id
+  const layout = cursor.type.name.slice(0, -"Tag".length).toLowerCase() as TagLayout
   cursor.firstChild()
   cursor.nextSibling()
   const isQuoted = isType(cursor, Type.IsQuoted)
@@ -52,6 +53,7 @@ function convertTag(cursor: TreeCursor, input: Input, isAttribute = false): Tag 
     attributes,
     isLiteral,
     contents,
+    layout,
   }
 }
 

@@ -1,17 +1,8 @@
-import { Content, isTagContent, isTextContent, isTextContents, Tag } from "./types"
+import { Content, isTagContent, isTextContent, isTextContents, Tag, TagLayout } from "./types"
 import { assert } from "./utils"
 
 // Types
-
-export enum TagLayout {
-  Atom, // {name}
-  Brace, // {name: text}
-  Line, // {name=} text
-  End, // {name#}\n--\ntext
-  Indent, // {name#}\n: text
-}
-
-interface PrintTag extends Tag {
+interface PrintTag extends Omit<Tag, "attributes" | "contents" | "layout"> {
   attributes: PrintTag[]
   contents: PrintContent[]
   layout: TagLayout
@@ -22,23 +13,23 @@ type PrintContent = string | PrintTag
 // Check
 
 function isAtomTag(tag: PrintTag): boolean {
-  return tag.layout === TagLayout.Atom
+  return tag.layout === "atom"
 }
 
 function isBraceTag(tag: PrintTag): boolean {
-  return tag.layout === TagLayout.Brace
+  return tag.layout === "brace"
 }
 
 function isLineTag(tag: PrintTag): boolean {
-  return tag.layout === TagLayout.Line
+  return tag.layout === "line"
 }
 
 function isEndTag(tag: PrintTag): boolean {
-  return tag.layout === TagLayout.End
+  return tag.layout === "end"
 }
 
 function isIndentTag(tag: PrintTag): boolean {
-  return tag.layout === TagLayout.Indent
+  return tag.layout === "indent"
 }
 
 function isInlineTag(tag: PrintTag): boolean {
@@ -56,7 +47,7 @@ function prepareTag(tag: Tag): PrintTag {
     ...tag,
     attributes: tag.attributes.map(prepareTag),
     contents: prepareContents(tag.contents),
-    layout: tag.contents.length > 0 ? TagLayout.Brace : TagLayout.Atom,
+    layout: tag.contents.length > 0 ? "brace" : "atom",
   }
 }
 
@@ -69,11 +60,11 @@ function prepareContents(contents: Content[]): PrintContent[] {
 function layoutTag(tag: PrintTag): void {
   for (const attr of tag.attributes) layoutTag(attr)
   if (tag.attributes.length >= 3) {
-    tag.layout = TagLayout.Indent
+    tag.layout = "indent"
   } else if (!isMultilineTag(tag)) {
     for (const attr of tag.attributes) {
       if (!isInlineTag(attr)) {
-        tag.layout = TagLayout.Indent
+        tag.layout = "indent"
         break
       }
     }
@@ -82,7 +73,7 @@ function layoutTag(tag: PrintTag): void {
   if (isMultilineTag(tag)) {
     for (const attr of tag.attributes) {
       if (isBraceTag(attr)) {
-        attr.layout = TagLayout.Line
+        attr.layout = "line"
       }
     }
   }
@@ -93,13 +84,13 @@ function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
   for (const content of contents) if (isTagContent(content)) layoutTag(content)
   const lastContent = contents[contents.length - 1]
   if (isTagContent(lastContent) && isIndentTag(lastContent)) {
-    lastContent.layout = TagLayout.End
+    lastContent.layout = "end"
   }
   if (!tag || isMultilineTag(tag)) return
   let isPrevLineTag = false
   for (const content of contents) {
     if (isPrevLineTag || (isTagContent(content) ? isMultilineTag(content) : /\r?\n/.test(content))) {
-      tag.layout = TagLayout.Indent
+      tag.layout = "indent"
       return
     }
     if (isTagContent(content) && isLineTag(content)) {
@@ -121,7 +112,7 @@ function layoutContents(contents: PrintContent[], tag?: PrintTag): void {
       }
     }
     if (unbalancedLeft > 0 || unbalancedRight > 0) {
-      tag.layout = TagLayout.Line
+      tag.layout = "line"
     }
   }
 }

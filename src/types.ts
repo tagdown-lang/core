@@ -29,10 +29,19 @@ export type Tag = {
   // giving further meaning to the structures build with the tags,
   // and allowing the tagging of text, i.e. marking a piece of text with a label.
   contents: Content[]
+
+  // The way the tag should be layed out.
+  // Without this, supporting any kind of widgets that programmatically modifies tags
+  // while editing a Tagdown document, would become really painful
+  // as it would force to use of the layout as dictated by the printer, rather than the user.
+  layout?: TagLayout
 }
 
 // The language consists of a mixed content of text and tags.
 export type Content = string | Tag
+
+// The supported ways a tag can be layed out.
+export type TagLayout = "atom" | "brace" | "line" | "end" | "indent"
 
 // Check
 

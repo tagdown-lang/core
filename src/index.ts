@@ -10,6 +10,7 @@ export {
   isTextContent,
   isTextContents,
   Tag,
+  TagLayout,
 } from "./types"
 
 export {
