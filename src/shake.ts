@@ -1,5 +1,8 @@
 import { Content, isTagContent, Tag } from "./types"
 
+// We do not include layout, even though it will result in loss of information,
+// as shaking is intended to make it more easy to inspect tags,
+// and the layout property would be considered noise.
 export type ShakenTag = {
   isQuoted?: boolean
   isAttribute?: boolean
