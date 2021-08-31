@@ -52,7 +52,7 @@ function prepareTag(tag: Tag): PrintTag {
 }
 
 function prepareContents(contents: Content[]): PrintContent[] {
-  return contents.map(content => (isTagContent(content) ? prepareTag(content) : content))
+  return contents.map((content) => (isTagContent(content) ? prepareTag(content) : content))
 }
 
 // Layout
@@ -134,7 +134,7 @@ function assertTag(tag: PrintTag): void {
     )
   }
   assert(
-    tag.attributes.every(attr => attr.isAttribute),
+    tag.attributes.every((attr) => attr.isAttribute),
     "attributes must be marked as such",
   )
   tag.attributes.forEach(assertTag)
@@ -221,7 +221,7 @@ function outputTag(tag: PrintTag, indentLevel: number): string {
   if (tag.isQuoted) output += "'"
   if (tag.isAttribute) output += "@"
   output += tag.name
-  const attrOutputs = tag.attributes.map(attr => outputTag(attr, indentLevel + 1))
+  const attrOutputs = tag.attributes.map((attr) => outputTag(attr, indentLevel + 1))
   if (!isMultilineTag(tag)) {
     output += attrOutputs.join("")
   }
@@ -235,7 +235,7 @@ function outputTag(tag: PrintTag, indentLevel: number): string {
     output += " " + outputContents(tag.contents, indentLevel, tag)
   } else if (isMultilineTag(tag)) {
     const newLineIndent = "\n" + "  ".repeat(indentLevel)
-    output += attrOutputs.map(output => newLineIndent + "  " + output).join("")
+    output += attrOutputs.map((output) => newLineIndent + "  " + output).join("")
     if (tag.contents.length > 0) {
       output +=
         newLineIndent +

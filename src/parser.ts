@@ -141,7 +141,7 @@ class TreeBuilder {
     if (child instanceof TreeBuilder) {
       const offset = child.from - this.from
       this.children.push(...child.children)
-      this.positions.push(...child.positions.map(position => position + offset))
+      this.positions.push(...child.positions.map((position) => position + offset))
     } else if (child instanceof TreeLeaf) {
       const { type, to, from } = child
       this.children.push(new Tree(this.nodeSet.types[type], [], [], to - from))

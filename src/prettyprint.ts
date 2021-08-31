@@ -46,7 +46,7 @@ function outputTag(cursor: TreeCursor, input: Input, indentLevel: number, isAttr
     const newLineIndent = "\n" + "  ".repeat(indentLevel)
     if (cursor.type.id === Type.MultilineAttributes) {
       output += outputAttributes(cursor, input, indentLevel)
-        .map(output => newLineIndent + "  " + output)
+        .map((output) => newLineIndent + "  " + output)
         .join("")
     }
     if (cursor.type.id === Type.ContentsMarker) {

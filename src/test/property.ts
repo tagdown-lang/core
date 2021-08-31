@@ -14,11 +14,11 @@ function joinTexts(contents: Content[]): Content[] {
 }
 
 function AlphabetArbitrary(alphabet: string) {
-  return fc.integer(0, alphabet.length - 1).map(i => alphabet[i])
+  return fc.integer(0, alphabet.length - 1).map((i) => alphabet[i])
 }
 
 function oneOutOf(n: number) {
-  return fc.integer(1, n).map(i => i === n)
+  return fc.integer(1, n).map((i) => i === n)
 }
 
 const visibleAsciiArb = AlphabetArbitrary(
@@ -43,24 +43,24 @@ const nameArb = fc
   .tuple(fc.stringOf(alphaArb, { minLength: 1 }), fc.array(fc.stringOf(alphanumericArb, { minLength: 1 })))
   .map(([s1, ss]) => [s1].concat(ss).join(" "))
 
-export const tagArb: fc.Memo<Tag> = fc.memo(n =>
+export const tagArb: fc.Memo<Tag> = fc.memo((n) =>
   fc
     .record({
       isQuoted: oneOutOf(10),
       isAttribute: oneOutOf(3),
       name: nameArb,
       attributes:
-        n > 1 ? fc.array(tagArb(n - 1).map(tag => ({ ...tag, isAttribute: true }))) : fc.constant([]),
+        n > 1 ? fc.array(tagArb(n - 1).map((tag) => ({ ...tag, isAttribute: true }))) : fc.constant([]),
       isLiteral: oneOutOf(4),
       contents: contentsArb(n - 1),
     })
-    .map(tag => ({
+    .map((tag) => ({
       ...tag,
       isLiteral: tag.isLiteral && isTextContents(tag.contents),
     })),
 )
 
-export const contentsArb: fc.Memo<Content[]> = fc.memo(n =>
+export const contentsArb: fc.Memo<Content[]> = fc.memo((n) =>
   n > 1 ? fc.array(fc.oneof(textArb, tagArb(n - 1))).map(joinTexts) : fc.array(textArb, { maxLength: 1 }),
 )
 
@@ -69,7 +69,7 @@ function shrinkArray<T>(shrinkElement: (element: T) => fc.Stream<T>, array: T[])
   const x = array[0]
   const xs = array.slice(1)
   return fc.Stream.of(xs)
-    .join(shrinkElement(x).map(y => [y].concat(xs)))
+    .join(shrinkElement(x).map((y) => [y].concat(xs)))
     .join(shrinkArray(shrinkElement, xs))
 }
 
@@ -79,7 +79,7 @@ function shrinkTag(tag: Tag): fc.Stream<Tag> {
     stream = stream.join(
       tag.contents
         .filter(isTagContent)
-        .map(ctag => ({ ...ctag, isQuoted: tag.isQuoted, isAttribute: tag.isAttribute }))
+        .map((ctag) => ({ ...ctag, isQuoted: tag.isQuoted, isAttribute: tag.isAttribute }))
         .values(),
     )
   }
@@ -87,10 +87,10 @@ function shrinkTag(tag: Tag): fc.Stream<Tag> {
     stream = stream.join(tag.attributes.values())
   }
   if (tag.contents.length > 0 && !tag.isLiteral) {
-    stream = stream.join(shrinkContents(tag.contents).map(contents => ({ ...tag, contents })))
+    stream = stream.join(shrinkContents(tag.contents).map((contents) => ({ ...tag, contents })))
   }
   if (tag.attributes.length > 0) {
-    stream = stream.join(shrinkArray(shrinkTag, tag.attributes).map(attributes => ({ ...tag, attributes })))
+    stream = stream.join(shrinkArray(shrinkTag, tag.attributes).map((attributes) => ({ ...tag, attributes })))
   }
   return stream
 }
