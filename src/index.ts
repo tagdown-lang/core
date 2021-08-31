@@ -1,5 +1,6 @@
 export {
   Content,
+  isAttributeContent,
   isContent,
   isContents,
   isEqualTag,

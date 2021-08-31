@@ -80,6 +80,10 @@ export function isTagContent(content: Content): content is Tag {
   return typeof content === "object"
 }
 
+export function isAttributeContent(content: Content): content is Tag {
+  return isTagContent(content) && content.isAttribute
+}
+
 export function isTextContents(contents: Content[]): contents is string[] {
   return contents.length === 1 && isTextContent(contents[0])
 }
