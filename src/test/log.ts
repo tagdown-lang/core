@@ -1,23 +1,24 @@
-import * as inspect from "browser-util-inspect"
+import { inspect } from "util"
 
 import { parseContents } from "../parse"
 import { printContents } from "../print"
 import { shakeContents } from "../shake"
 import { Content, Tag } from "../types"
 
-function prettyprint(arg: any): string {
-  return inspect(arg, {
-    depth: null,
-    colors: true,
-  })
-}
-
 export function log(...args: any[]): void {
-  console.log(...args.map(prettyprint))
+  console.log(
+    ...args.map((arg) =>
+      inspect(arg, {
+        depth: null,
+        colors: true,
+        breakLength: 110,
+      }),
+    ),
+  )
 }
 
 export function logItem(arg: any, footer: string): void {
-  console.log(prettyprint(arg))
+  log(arg)
   console.log(arg)
   console.log("---------- ^ " + footer)
 }
