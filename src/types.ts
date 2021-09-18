@@ -115,9 +115,12 @@ export function isEqualTag(tag1: Tag, tag2: Tag): boolean {
   }
   for (let i = 0; i < tag1.contents.length; i++) {
     if (
-      !(typeof tag1.contents[i] === typeof tag2.contents[i] && typeof tag1.contents[i] === "string"
-        ? tag1.contents[i] === tag2.contents[i]
-        : isEqualTag(tag1.contents[i] as Tag, tag2.contents[i] as Tag))
+      !(
+        typeof tag1.contents[i] === typeof tag2.contents[i] &&
+        (typeof tag1.contents[i] === "string"
+          ? tag1.contents[i] === tag2.contents[i]
+          : isEqualTag(tag1.contents[i] as Tag, tag2.contents[i] as Tag))
+      )
     ) {
       return false
     }
