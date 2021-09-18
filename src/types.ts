@@ -43,6 +43,11 @@ export type Content = string | Tag
 // The supported ways a tag can be layed out.
 export type TagLayout = "atom" | "brace" | "line" | "end" | "indent"
 
+export type PartialTag = Omit<Partial<Tag>, "attributes" | "contents"> & {
+  attributes?: PartialTag[]
+  contents?: (string | PartialTag)[]
+}
+
 // Check
 
 export function isText(arg: any): arg is string {
@@ -72,23 +77,23 @@ export function isContents(arg: any): arg is Content[] {
   return Array.isArray(arg) && arg.every(isContent)
 }
 
-export function isTextContent(content: Content): content is string {
+export function isTextContent<T extends PartialTag>(content: string | T): content is string {
   return typeof content === "string"
 }
 
-export function isTagContent(content: Content): content is Tag {
+export function isTagContent<T extends PartialTag>(content: string | T): content is T {
   return typeof content === "object"
 }
 
-export function isAttributeContent(content: Content): content is Tag {
-  return isTagContent(content) && content.isAttribute
+export function isAttributeContent<T extends PartialTag>(content: string | T): content is T {
+  return isTagContent(content) && !!content.isAttribute
 }
 
-export function isTextContents(contents: Content[]): contents is string[] {
+export function isTextContents<T extends PartialTag>(contents: (string | T)[]): contents is string[] {
   return contents.length === 1 && isTextContent(contents[0])
 }
 
-export function isTagContents(contents: Content[]): contents is Tag[] {
+export function isTagContents<T extends PartialTag>(contents: (string | T)[]): contents is T[] {
   return contents.length === 1 && isTagContent(contents[0])
 }
 
@@ -118,4 +123,18 @@ export function isEqualTag(tag1: Tag, tag2: Tag): boolean {
     }
   }
   return true
+}
+
+export function cloneTag(tag: Tag): Tag {
+  return {
+    ...tag,
+    attributes: tag.attributes.map(cloneTag),
+    contents: tag.contents.map(mapTagContent(cloneTag)),
+  }
+}
+
+export function mapTagContent<T extends PartialTag, R>(
+  mapTag: (tag: T) => R,
+): (content: string | T) => string | R {
+  return (content) => (typeof content === "object" ? mapTag(content) : content)
 }

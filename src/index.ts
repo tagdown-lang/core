@@ -1,4 +1,5 @@
 export {
+  cloneTag,
   Content,
   isAttributeContent,
   isContent,
@@ -10,20 +11,12 @@ export {
   isText,
   isTextContent,
   isTextContents,
+  mapTagContent,
   Tag,
   TagLayout,
 } from "./types"
 
-export {
-  isShakenTagContent,
-  isShakenTextContent,
-  shakeContents,
-  ShakenContent,
-  ShakenTag,
-  shakeTag,
-  unshakeContents,
-  unshakeTag,
-} from "./shake"
+export { shakeContents, ShakenContent, ShakenTag, shakeTag, unshakeContents, unshakeTag } from "./shake"
 
 export {
   isBlockTagType,

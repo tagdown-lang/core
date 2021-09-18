@@ -1,4 +1,4 @@
-import { Content, isTagContent, isTextContent, isTextContents, Tag, TagLayout } from "./types"
+import { Content, isTagContent, isTextContent, isTextContents, mapTagContent, Tag, TagLayout } from "./types"
 import { assert } from "./utils"
 
 // Types
@@ -52,7 +52,7 @@ function prepareTag(tag: Tag): PrintTag {
 }
 
 function prepareContents(contents: Content[]): PrintContent[] {
-  return contents.map((content) => (isTagContent(content) ? prepareTag(content) : content))
+  return contents.map(mapTagContent(prepareTag))
 }
 
 // Layout

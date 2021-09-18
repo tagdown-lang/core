@@ -1,4 +1,4 @@
-import { Content, isTagContent, Tag } from "./types"
+import { Content, mapTagContent, Tag } from "./types"
 
 // We do not include layout, even though it will result in loss of information,
 // as shaking is intended to make it more easy to inspect tags,
@@ -26,7 +26,7 @@ export function shakeTag(tag: Tag, isAttribute = false): ShakenTag {
 }
 
 export function shakeContents(contents: Content[]): ShakenContent[] {
-  return contents.map((content) => (isTagContent(content) ? shakeTag(content, false) : content))
+  return contents.map(mapTagContent((tag) => shakeTag(tag, false)))
 }
 
 export function unshakeTag(
@@ -51,13 +51,5 @@ export function unshakeTag(
 }
 
 export function unshakeContents(contents: ShakenContent[]): Content[] {
-  return contents.map((content) => (typeof content === "object" ? unshakeTag(content) : content))
-}
-
-export function isShakenTextContent(content: ShakenContent): content is string {
-  return typeof content === "string"
-}
-
-export function isShakenTagContent(content: ShakenContent): content is ShakenTag {
-  return typeof content === "object"
+  return contents.map(mapTagContent(unshakeTag))
 }
