@@ -5,22 +5,22 @@ import { printContents } from "../print"
 import { shakeContents } from "../shake"
 import { Content, Tag } from "../types"
 
-export function log(...args: any[]): void {
-  console.log(
-    ...args.map((arg) =>
-      inspect(arg, {
-        depth: null,
-        colors: true,
-        breakLength: 110,
-      }),
-    ),
-  )
+export function prettyprint(arg: any): string {
+  return inspect(arg, {
+    depth: null,
+    colors: true,
+    breakLength: 110,
+  })
 }
 
-export function logItem(arg: any, footer: string): void {
-  log(arg)
-  console.log(arg)
-  console.log("---------- ^ " + footer)
+export function log(...args: any[]): void {
+  console.log(...args.map(prettyprint))
+}
+
+export function logExpr(exprAsString: string, expr: any): void {
+  const args = [exprAsString, "=>", prettyprint(expr)]
+  if (typeof expr === "string" && expr.includes("\n")) args.push(expr)
+  console.log(...args)
 }
 
 export function logParse(input: string): Content[] {

@@ -1,16 +1,16 @@
 import * as fc from "fast-check"
 
 import { parseTree, prettyprint, printContents, validateTree } from "../../src"
-import { logItem } from "../../src/test/log"
+import { logExpr } from "../../src/test/log"
 import { assertProperty, contentsArb } from "../../src/test/property"
 
 // Checks whether we are lossless when dealing with invalid input.
 assertProperty(
-  contentsArb(5).chain(contents => {
+  contentsArb(5).chain((contents) => {
     const input = printContents(contents)
     const indexes: number[] = []
     for (let i = 0; i < input.length; i++) if (["{", "}"].includes(input[i])) indexes.push(i)
-    return fc.subarray(indexes).map(indexes => {
+    return fc.subarray(indexes).map((indexes) => {
       let output = ""
       let start = 0
       for (const end of indexes) {
@@ -21,11 +21,11 @@ assertProperty(
       return output
     })
   }),
-  input => {
+  (input) => {
     return validateTree(parseTree(input), input)
   },
-  input => {
-    logItem(input, "input")
-    logItem(prettyprint(input), "prettyprint(input)")
+  (input) => {
+    logExpr(`input`, input)
+    logExpr(`prettyprint(input)`, prettyprint(input))
   },
 )

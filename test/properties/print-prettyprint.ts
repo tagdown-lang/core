@@ -1,16 +1,16 @@
 import { prettyprint, printContents } from "../../src"
-import { logItem } from "../../src/test/log"
+import { logExpr } from "../../src/test/log"
 import { assertProperty, contentsArb } from "../../src/test/property"
 
 assertProperty(
   contentsArb(5),
-  contents => {
+  (contents) => {
     const output = printContents(contents)
     return prettyprint(output) === output
   },
-  contents => {
+  (contents) => {
     const output = printContents(contents)
-    logItem(output, "output")
-    logItem(prettyprint(output), "prettyprint(output)")
+    logExpr(`output`, output)
+    logExpr(`prettyprint(output)`, prettyprint(output))
   },
 )

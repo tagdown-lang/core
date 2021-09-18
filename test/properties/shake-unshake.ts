@@ -4,8 +4,8 @@ import { assertProperty, tagArb } from "../../src/test/property"
 
 assertProperty(
   tagArb(5),
-  tag => {
+  (tag) => {
     return isEqualTag(unshakeTag(shakeTag(tag)), tag)
   },
-  tag => logPrint(tag),
+  (tag) => logPrint(tag),
 )

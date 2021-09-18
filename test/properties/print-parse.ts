@@ -4,9 +4,9 @@ import { assertProperty, contentsArb } from "../../src/test/property"
 
 assertProperty(
   contentsArb(5),
-  contents => {
+  (contents) => {
     const output = printContents(contents)
     return printContents(parseContents(output)) === output
   },
-  contents => logPrint(contents),
+  (contents) => logPrint(contents),
 )
