@@ -25,7 +25,7 @@ export function shakeTag(tag: Tag, isAttribute = false): ShakenTag {
   return shakenTag
 }
 
-export function shakeContents(contents: Content[]): ShakenContent[] {
+export function shakeContents(contents: readonly Content[]): ShakenContent[] {
   return contents.map(mapTagContent((tag) => shakeTag(tag, false)))
 }
 

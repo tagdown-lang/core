@@ -9,32 +9,32 @@ export type Tag = {
   // However this would make the syntax part of the internal representation,
   // fixating the language to its current syntax if we want the internal representation to be future proof,
   // therby hindering future improvements to the syntax.
-  isQuoted: boolean
+  readonly isQuoted: boolean
 
   // Whether the tag is an attribute. Every attribute is a tag, but not every tag is an attribute.
-  isAttribute: boolean
+  readonly isAttribute: boolean
 
   // The name (i.e. label) of the tag.
-  name: string
+  readonly name: string
 
   // The list of attributes belonging to the tag. Detailing more about the tag itself.
-  attributes: Tag[]
+  readonly attributes: readonly Tag[]
 
   // Whether the content of the tag should be taken literally,
   // i.e. escapes sequences and tags will be ignored.
   // In that case the contents will always consist of just text.
-  isLiteral: boolean
+  readonly isLiteral: boolean
 
   // The contents of the tag, allowing assigning textual value to a tag,
   // giving further meaning to the structures build with the tags,
   // and allowing the tagging of text, i.e. marking a piece of text with a label.
-  contents: Content[]
+  readonly contents: readonly Content[]
 
   // The way the tag should be layed out.
   // Without this, supporting any kind of widgets that programmatically modifies tags
   // while editing a Tagdown document, would become really painful
   // as it would force to use of the layout as dictated by the printer, rather than the user.
-  layout?: TagLayout
+  readonly layout?: TagLayout
 }
 
 // The language consists of a mixed content of text and tags.
@@ -44,11 +44,11 @@ export type Content = string | Tag
 export type TagLayout = "atom" | "brace" | "line" | "end" | "indent"
 
 export type PartialTag = Omit<Partial<Tag>, "attributes" | "contents"> & {
-  attributes?: PartialTag[]
-  contents?: (string | PartialTag)[]
+  attributes?: readonly PartialTag[]
+  contents?: readonly (string | PartialTag)[]
 }
 
-// Check
+// Checkers
 
 export function isText(arg: any): arg is string {
   return typeof arg === "string"
@@ -77,6 +77,8 @@ export function isContents(arg: any): arg is Content[] {
   return Array.isArray(arg) && arg.every(isContent)
 }
 
+// Generic checkers
+
 export function isTextContent<T extends PartialTag>(content: string | T): content is string {
   return typeof content === "string"
 }
@@ -89,55 +91,89 @@ export function isAttributeContent<T extends PartialTag>(content: string | T): c
   return isTagContent(content) && !!content.isAttribute
 }
 
-export function isTextContents<T extends PartialTag>(contents: (string | T)[]): contents is string[] {
+export function isTextContents<T extends PartialTag>(
+  contents: readonly (string | T)[],
+): contents is readonly string[] {
   return contents.length === 1 && isTextContent(contents[0])
 }
 
-export function isTagContents<T extends PartialTag>(contents: (string | T)[]): contents is T[] {
+export function isTagContents<T extends PartialTag>(
+  contents: readonly (string | T)[],
+): contents is readonly T[] {
   return contents.length === 1 && isTagContent(contents[0])
 }
 
-export function isEqualTag(tag1: Tag, tag2: Tag): boolean {
+export function isLeafTag<T extends PartialTag>(tag: T): boolean {
+  return (
+    tag.contents !== undefined &&
+    (tag.contents.length === 0 || (tag.contents.length === 1 && typeof tag.contents[0] === "string"))
+  )
+}
+
+export function isEqualTag<T extends PartialTag>(tag1: T, tag2: T): boolean {
   if (
     !(
       tag1.isQuoted === tag2.isQuoted &&
       tag1.isAttribute === tag2.isAttribute &&
       tag1.name === tag2.name &&
-      tag1.attributes.length === tag2.attributes.length &&
+      typeof tag1.attributes === typeof tag2.attributes &&
       tag1.isLiteral === tag2.isLiteral &&
-      tag1.contents.length === tag2.contents.length
+      typeof tag1.contents === typeof tag2.contents
     )
   ) {
     return false
   }
-  for (let i = 0; i < tag1.attributes.length; i++) {
-    if (!isEqualTag(tag1.attributes[i], tag2.attributes[i])) return false
+  if (tag1.attributes && tag2.attributes) {
+    for (let i = 0; i < tag1.attributes.length; i++) {
+      if (!isEqualTag(tag1.attributes[i], tag2.attributes[i])) return false
+    }
   }
-  for (let i = 0; i < tag1.contents.length; i++) {
-    if (
-      !(
-        typeof tag1.contents[i] === typeof tag2.contents[i] &&
-        (typeof tag1.contents[i] === "string"
-          ? tag1.contents[i] === tag2.contents[i]
-          : isEqualTag(tag1.contents[i] as Tag, tag2.contents[i] as Tag))
-      )
-    ) {
-      return false
+  if (tag1.contents && tag2.contents) {
+    for (let i = 0; i < tag1.contents.length; i++) {
+      if (
+        !(
+          typeof tag1.contents[i] === typeof tag2.contents[i] &&
+          (typeof tag1.contents[i] === "string"
+            ? tag1.contents[i] === tag2.contents[i]
+            : isEqualTag(tag1.contents[i] as Tag, tag2.contents[i] as Tag))
+        )
+      ) {
+        return false
+      }
     }
   }
   return true
 }
 
-export function cloneTag(tag: Tag): Tag {
+// Transformations
+
+export function tagToJson(tag: Tag): Tag {
   return {
     ...tag,
-    attributes: tag.attributes.map(cloneTag),
-    contents: tag.contents.map(mapTagContent(cloneTag)),
+    attributes: Array.from(tag.attributes, tagToJson),
+    contents: Array.from(tag.contents, contentToJson),
   }
 }
+
+export const contentToJson = mapTagContent(tagToJson)
+
+export const cloneTag = tagToJson
+
+// Generic transformations
 
 export function mapTagContent<T extends PartialTag, R>(
   mapTag: (tag: T) => R,
 ): (content: string | T) => string | R {
   return (content) => (typeof content === "object" ? mapTag(content) : content)
+}
+
+export function joinTexts<T extends PartialTag>(contents: readonly (string | T)[]): (string | T)[] {
+  return contents.reduceRight((contents, content) => {
+    if (typeof content === "string" && typeof contents[0] === "string") {
+      contents[0] = content + contents[0]
+    } else {
+      contents.unshift(content)
+    }
+    return contents
+  }, [] as (string | T)[])
 }

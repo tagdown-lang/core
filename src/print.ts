@@ -51,7 +51,7 @@ function prepareTag(tag: Tag): PrintTag {
   }
 }
 
-function prepareContents(contents: Content[]): PrintContent[] {
+function prepareContents(contents: readonly Content[]): PrintContent[] {
   return contents.map(mapTagContent(prepareTag))
 }
 

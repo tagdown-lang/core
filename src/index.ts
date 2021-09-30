@@ -1,19 +1,23 @@
 export {
   cloneTag,
   Content,
+  contentToJson,
   isAttributeContent,
   isContent,
   isContents,
   isEqualTag,
+  isLeafTag,
   isTag,
   isTagContent,
   isTagContents,
   isText,
   isTextContent,
   isTextContents,
+  joinTexts,
   mapTagContent,
   Tag,
   TagLayout,
+  tagToJson,
 } from "./types"
 
 export { shakeContents, ShakenContent, ShakenTag, shakeTag, unshakeContents, unshakeTag } from "./shake"

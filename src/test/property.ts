@@ -1,17 +1,6 @@
 import * as fc from "fast-check"
 
-import { Content, isTagContent, isTextContents, Tag } from "../types"
-
-function joinTexts(contents: Content[]): Content[] {
-  return contents.reduceRight((contents, content) => {
-    if (typeof content === "string" && typeof contents[0] === "string") {
-      contents[0] = content + contents[0]
-    } else {
-      contents.unshift(content)
-    }
-    return contents
-  }, [] as Content[])
-}
+import { Content, isTagContent, isTextContents, joinTexts, Tag } from "../types"
 
 function AlphabetArbitrary(alphabet: string) {
   return fc.integer(0, alphabet.length - 1).map((i) => alphabet[i])
@@ -64,7 +53,7 @@ export const contentsArb: fc.Memo<Content[]> = fc.memo((n) =>
   n > 1 ? fc.array(fc.oneof(textArb, tagArb(n - 1))).map(joinTexts) : fc.array(textArb, { maxLength: 1 }),
 )
 
-function shrinkArray<T>(shrinkElement: (element: T) => fc.Stream<T>, array: T[]): fc.Stream<T[]> {
+function shrinkArray<T>(shrinkElement: (element: T) => fc.Stream<T>, array: readonly T[]): fc.Stream<T[]> {
   if (array.length === 0) return fc.Stream.nil()
   const x = array[0]
   const xs = array.slice(1)
@@ -99,7 +88,7 @@ function shrinkContent(content: Content): fc.Stream<Content> {
   return typeof content === "string" ? fc.Stream.nil() : shrinkTag(content)
 }
 
-function shrinkContents(contents: Content[]) {
+function shrinkContents(contents: readonly Content[]) {
   return shrinkArray(shrinkContent, contents).map(joinTexts)
 }
 
@@ -108,16 +97,32 @@ export function assertProperty<T>(
   predicate: (arg: T) => boolean,
   logger: (arg: T) => void,
 ) {
-  fc.assert(fc.property(arbitrary, predicate), {
+  fc.assert(fc.property(arbitrary, predicate), assertOptions(logger))
+}
+
+export function assertAsyncProperty<T>(
+  arbitrary: fc.Arbitrary<T>,
+  predicate: (arg: T) => Promise<boolean>,
+  logger: (arg: T) => Promise<void>,
+) {
+  fc.assert(fc.asyncProperty(arbitrary, predicate), assertOptions(logger))
+}
+
+function assertOptions<T>(logger: (arg: T) => void) {
+  return {
     reporter(details) {
-      if (details.failed) {
-        console.log(
-          `Failed after ${details.numRuns} tests and ${details.numShrinks} shrinks with seed ${details.seed}.`,
-        )
-        if (details.counterexample !== null && details.counterexample.length > 0) {
-          logger(details.counterexample[0])
-        }
-      }
+      reportDetails(details, logger)
     },
-  })
+  }
+}
+
+function reportDetails<A extends T[], T>(details: fc.RunDetails<A>, logger: (arg: T) => void) {
+  if (details.failed) {
+    console.log(
+      `Failed after ${details.numRuns} tests and ${details.numShrinks} shrinks with seed ${details.seed}.`,
+    )
+    if (details.counterexample !== null && details.counterexample.length > 0) {
+      logger(details.counterexample[0])
+    }
+  }
 }
