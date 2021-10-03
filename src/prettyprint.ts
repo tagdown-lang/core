@@ -1,10 +1,10 @@
-import { Input, stringInput, Tree, TreeCursor } from "lezer-tree"
+import { Tree, TreeCursor } from "@lezer/common"
 
 import { isType, sliceType } from "./lezer"
 import { parseTree } from "./parse"
 import { isInlineTagType, isMultilineTagType, isTagType, isTextType, Type } from "./parser"
 
-function outputAttributes(cursor: TreeCursor, input: Input, indentLevel: number): string[] {
+function outputAttributes(cursor: TreeCursor, input: string, indentLevel: number): string[] {
   const outputs: string[] = []
   cursor.firstChild()
   while (isTagType(cursor.type.id)) {
@@ -16,7 +16,7 @@ function outputAttributes(cursor: TreeCursor, input: Input, indentLevel: number)
   return outputs
 }
 
-function outputTag(cursor: TreeCursor, input: Input, indentLevel: number, isAttribute = false): string {
+function outputTag(cursor: TreeCursor, input: string, indentLevel: number, isAttribute = false): string {
   const tagType = cursor.type.id
   cursor.firstChild()
   cursor.nextSibling()
@@ -61,7 +61,7 @@ function outputTag(cursor: TreeCursor, input: Input, indentLevel: number, isAttr
   return output
 }
 
-function outputContents(cursor: TreeCursor, input: Input, tagType: number, indentLevel = 0): string {
+function outputContents(cursor: TreeCursor, input: string, tagType: number, indentLevel = 0): string {
   if (!cursor.firstChild()) return ""
   let output = ""
   let hasNext = true
@@ -69,10 +69,10 @@ function outputContents(cursor: TreeCursor, input: Input, tagType: number, inden
     const { from, to } = cursor
     const type = cursor.type.id
     if (isTextType(type)) {
-      const text = input.read(from, to)
+      const text = input.slice(from, to)
       output += isMultilineTagType(tagType) ? text.replace(/(\r?\n)/g, "$1" + "  ".repeat(indentLevel)) : text
     } else if (type === Type.TagError) {
-      output += input.read(from, to)
+      output += input.slice(from, to)
     } else {
       output += outputTag(cursor, input, indentLevel)
     }
@@ -88,8 +88,7 @@ function outputContents(cursor: TreeCursor, input: Input, tagType: number, inden
   return output
 }
 
-export function prettyprintTree(tree: Tree, input: Input | string): string {
-  if (typeof input === "string") input = stringInput(input)
+export function prettyprintTree(tree: Tree, input: string): string {
   const cursor = tree.cursor()
   return outputContents(cursor, input, Type.None)
 }

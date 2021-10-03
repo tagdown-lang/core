@@ -1,8 +1,8 @@
-import { Input, NodeType, stringInput, SyntaxNode, Tree, TreeCursor } from "lezer-tree"
+import { NodeType, SyntaxNode, Tree, TreeCursor } from "@lezer/common"
 
-export function sliceType(cursor: TreeCursor, input: Input, type: number): string | null {
+export function sliceType(cursor: TreeCursor, input: string, type: number): string | null {
   if (cursor.type.id === type) {
-    const s = input.read(cursor.from, cursor.to)
+    const s = input.slice(cursor.from, cursor.to)
     cursor.nextSibling()
     return s
   }
@@ -35,7 +35,6 @@ type TreeTraversalOptions = {
 
 export function traverseTree(
   cursor: TreeCursor | Tree | SyntaxNode,
-  input: Input | string,
   {
     from = -Infinity,
     to = Infinity,
@@ -46,7 +45,6 @@ export function traverseTree(
   }: TreeTraversalOptions,
 ): void {
   if (!(cursor instanceof TreeCursor)) cursor = cursor instanceof Tree ? cursor.cursor() : cursor.cursor
-  if (typeof input === "string") input = stringInput(input)
   for (;;) {
     let node = cursorNode(cursor)
     let leave = false
@@ -78,10 +76,7 @@ function isChildOf(child: CursorNode, parent: CursorNode): boolean {
   )
 }
 
-export function validatorTraversal(
-  input: Input | string,
-  { fullMatch = true }: { fullMatch?: boolean } = {},
-) {
+export function validatorTraversal(input: string, { fullMatch = true }: { fullMatch?: boolean } = {}) {
   const state = {
     valid: true,
     parentNodes: [] as CursorNode[],
@@ -115,10 +110,10 @@ export function validatorTraversal(
 
 export function validateTree(
   tree: TreeCursor | Tree | SyntaxNode,
-  input: Input | string,
+  input: string,
   options?: { fullMatch?: boolean },
 ): boolean {
   const { state, traversal } = validatorTraversal(input, options)
-  traverseTree(tree, input, traversal)
+  traverseTree(tree, traversal)
   return state.valid
 }

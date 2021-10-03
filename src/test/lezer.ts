@@ -1,4 +1,4 @@
-import { Input, stringInput, SyntaxNode, Tree, TreeCursor } from "lezer-tree"
+import { Input, SyntaxNode, Tree, TreeCursor } from "@lezer/common"
 
 import { traverseTree, validatorTraversal } from "../lezer"
 
@@ -16,17 +16,16 @@ type PrintTreeOptions = { from?: number; to?: number; start?: number; includePar
 
 export function printTree(
   cursor: TreeCursor | Tree | SyntaxNode,
-  inputOrString: Input | string,
+  input: string,
   { from, to, start = 0, includeParents }: PrintTreeOptions = {},
 ): string {
-  const input = typeof inputOrString === "string" ? stringInput(inputOrString) : inputOrString
   const state = {
     output: "",
     prefixes: [] as string[],
     hasNextSibling: false,
   }
   const validator = validatorTraversal(input)
-  traverseTree(cursor, input, {
+  traverseTree(cursor, {
     from,
     to,
     includeParents,
@@ -59,7 +58,7 @@ export function printTree(
             "]"
           : colorize(start + node.from, Color.Yellow))
       if (hasRange && node.isLeaf) {
-        state.output += ": " + colorize(JSON.stringify(input.read(node.from, node.to)), Color.Green)
+        state.output += ": " + colorize(JSON.stringify(input.slice(node.from, node.to)), Color.Green)
       }
     },
     onLeave(node) {
@@ -72,7 +71,7 @@ export function printTree(
 
 export function logTree(
   tree: TreeCursor | Tree | SyntaxNode,
-  input: Input | string,
+  input: string,
   options?: PrintTreeOptions,
 ): void {
   console.log(printTree(tree, input, options))

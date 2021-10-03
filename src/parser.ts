@@ -1,4 +1,4 @@
-import { Input, NodePropSource, NodeSet, NodeType, stringInput, Tree, TreeBuffer } from "lezer-tree"
+import { NodePropSource, NodeSet, NodeType, Tree } from "@lezer/common"
 
 // Needs to be exported, otherwise when using `Tree`, `NodeType` can only be inspected with `name`,
 // making it string typed. Exporting the enum makes it more type safe and easier to refactor.
@@ -71,8 +71,7 @@ for (let i = 3, name: string; (name = Type[i]); i++) {
 export class TagdownParser {
   constructor(readonly nodeSet: NodeSet) {}
 
-  parse(input: Input | string, indentLevel = 0): Tree {
-    if (typeof input === "string") input = stringInput(input)
+  parse(input: string, indentLevel = 0): Tree {
     let parse = new Parse(this, input, indentLevel)
     return parse.finish()
   }
@@ -111,7 +110,7 @@ class TreeLeaf {
 }
 
 class TreeBuilder {
-  readonly children: (Tree | TreeBuffer)[] = []
+  readonly children: Tree[] = []
   readonly positions: number[] = []
 
   constructor(readonly nodeSet: NodeSet, readonly from: number, public type: number = Type.None) {}
@@ -134,7 +133,7 @@ class TreeBuilder {
   }
 
   // Return a boolean for convenience: builder.add(...) || ...
-  add(child: TreeBuilder | Tree | TreeBuffer | TreeLeaf | null, from?: number): boolean {
+  add(child: TreeBuilder | Tree | TreeLeaf | null, from?: number): boolean {
     // Convenience to allow: const result = ...; if (result !== null) builder.add(result)
     // to become: builder.add(...)
     if (child === null) return false
@@ -167,6 +166,7 @@ class TextBuilder extends TreeBuilder {
       buffer.push(child.type.id, position, position + child.length, 4)
     }
     return Tree.build({
+      topID: Type.None,
       buffer,
       nodeSet: this.nodeSet,
       reused: this.children,
@@ -226,7 +226,7 @@ class Parse {
   readonly indents: number[]
   skipNewline = false
 
-  constructor(parser: TagdownParser, readonly input: Input, indentLevel: number) {
+  constructor(parser: TagdownParser, readonly input: string, indentLevel: number) {
     this.nodeSet = parser.nodeSet
     this.indents = [indentLevel]
   }
@@ -244,7 +244,7 @@ class Parse {
   }
 
   private peek(offset: number): number {
-    return this.input.get(this.pos + offset)
+    return this.input.charCodeAt(this.pos + offset)
   }
 
   private isChr(c: number, offset = 0): boolean {

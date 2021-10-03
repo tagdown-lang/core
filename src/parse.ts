@@ -1,10 +1,10 @@
-import { Input, stringInput, Tree, TreeCursor } from "lezer-tree"
+import { Tree, TreeCursor } from "@lezer/common"
 
 import { isType, sliceType } from "./lezer"
 import { isMultilineTagType, isTagType, parser, Type } from "./parser"
 import { Content, isTagContents, Tag, TagLayout } from "./types"
 
-function convertAttributes(cursor: TreeCursor, input: Input): Tag[] {
+function convertAttributes(cursor: TreeCursor, input: string): Tag[] {
   const attributes: Tag[] = []
   cursor.firstChild()
   while (isTagType(cursor.type.id)) {
@@ -16,7 +16,7 @@ function convertAttributes(cursor: TreeCursor, input: Input): Tag[] {
   return attributes
 }
 
-function convertTag(cursor: TreeCursor, input: Input, isAttribute = false): Tag {
+function convertTag(cursor: TreeCursor, input: string, isAttribute = false): Tag {
   const tagType = cursor.type.id
   const layout = cursor.type.name.slice(0, -"Tag".length).toLowerCase() as TagLayout
   cursor.firstChild()
@@ -57,7 +57,7 @@ function convertTag(cursor: TreeCursor, input: Input, isAttribute = false): Tag 
   }
 }
 
-function convertContents(cursor: TreeCursor, input: Input): Content[] {
+function convertContents(cursor: TreeCursor, input: string): Content[] {
   if (!cursor.firstChild()) return []
   const contents: Content[] = []
   let text: string | null = null
@@ -65,9 +65,9 @@ function convertContents(cursor: TreeCursor, input: Input): Content[] {
     const { from, to } = cursor
     const type = cursor.type.id
     if ([Type.Other, Type.TagError].includes(type)) {
-      text = (text || "") + input.read(from, to)
+      text = (text || "") + input.slice(from, to)
     } else if (type === Type.Escape) {
-      text = (text || "") + input.read(from + "\\".length, to)
+      text = (text || "") + input.slice(from + "\\".length, to)
     } else if (type === Type.StopMarker) {
       text = text || ""
     } else if (isTagType(type)) {
@@ -87,8 +87,7 @@ export function parseTree(input: string, indentLevel?: number): Tree {
   return parser.parse(input, indentLevel)
 }
 
-export function convertTreeToContents(tree: Tree, input: Input | string): Content[] {
-  if (typeof input === "string") input = stringInput(input)
+export function convertTreeToContents(tree: Tree, input: string): Content[] {
   const cursor = tree.cursor()
   return convertContents(cursor, input)
 }
