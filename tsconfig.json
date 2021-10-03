@@ -1,23 +1,8 @@
 {
-  "include": [
-    "src/**/*.ts",
-    "test/**/*.ts"
-  ],
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/**/*.ts"],
   "compilerOptions": {
-    "alwaysStrict": true,
-    "declaration": true,
-    "declarationMap": true,
-    "module": "commonjs",
-    "moduleResolution": "node",
-    "noImplicitReturns": true,
-    "noImplicitThis": true,
-    "outDir": "lib",
-    "rootDir": ".",
-    "sourceMap": true,
-    "strictBindCallApply": true,
-    "strictFunctionTypes": true,
-    "strictNullChecks": true,
-    "target": "ES2020",
-    "types": ["node"]
+    "rootDir": "src",
+    "outDir": "lib"
   }
 }

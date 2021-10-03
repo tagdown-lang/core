@@ -1,17 +1,24 @@
 {
-  "name": "tagdown",
+  "name": "@tagnode/tagdown",
   "version": "0.1.0",
-  "license": "MIT",
-  "main": "lib/index",
-  "devDependencies": {
-    "@types/node": "^16.7.2",
-    "fast-check": "^2.17.0",
-    "prettier": "^2.3.2",
-    "ts-node": "^10.2.0",
-    "typescript": "4.3"
-  },
   "private": true,
+  "author": {
+    "name": "Matthijs Steen",
+    "email": "matthijs@matthijssteen.nl",
+    "url": "https://github.com/msteen"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/msteen/tagnode.git",
+    "directory": "packages/tagdown"
+  },
+  "source": "src/index.ts",
+  "main": "lib/index.js",
   "dependencies": {
-    "lezer-tree": "^0.13.2"
+    "@lezer/common": "^0.15.6"
+  },
+  "devDependencies": {
+    "@types/node": "^16.10.2"
   }
 }
