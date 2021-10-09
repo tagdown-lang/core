@@ -1,5 +1,5 @@
 {
-  "name": "@tagnode/tagdown",
+  "name": "@tagdown/core",
   "version": "0.1.0",
   "private": true,
   "author": {
@@ -10,8 +10,8 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/msteen/tagnode.git",
-    "directory": "packages/tagdown"
+    "url": "https://github.com/msteen/tagdown.git",
+    "directory": "packages/core"
   },
   "source": "src/index.ts",
   "main": "lib/index.js",
