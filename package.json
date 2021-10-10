@@ -1,17 +1,29 @@
 {
   "name": "@tagdown/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "description": "Common functionality to ease working with the core of the Tagdown lightweight markup language",
+  "keywords": [
+    "tagdown",
+    "markup",
+    "language",
+    "syntax",
+    "ast",
+    "parse",
+    "parser",
+    "print",
+    "pretty",
+    "prettyprint"
+  ],
+  "license": "MIT",
   "author": {
     "name": "Matthijs Steen",
     "email": "matthijs@matthijssteen.nl"
   },
-  "license": "MIT",
+  "main": "lib/index.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/tagdown-lang/core.git"
   },
-  "source": "src/index.ts",
-  "main": "lib/index.js",
   "dependencies": {
     "@lezer/common": "^0.15.6"
   },
