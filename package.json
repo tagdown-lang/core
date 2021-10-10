@@ -1,7 +1,6 @@
 {
   "name": "@tagdown/core",
   "version": "0.1.0",
-  "private": true,
   "author": {
     "name": "Matthijs Steen",
     "email": "matthijs@matthijssteen.nl"
