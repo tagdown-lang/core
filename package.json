@@ -4,14 +4,12 @@
   "private": true,
   "author": {
     "name": "Matthijs Steen",
-    "email": "matthijs@matthijssteen.nl",
-    "url": "https://github.com/msteen"
+    "email": "matthijs@matthijssteen.nl"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/msteen/tagdown.git",
-    "directory": "packages/core"
+    "url": "https://github.com/tagdown-lang/core.git"
   },
   "source": "src/index.ts",
   "main": "lib/index.js",
