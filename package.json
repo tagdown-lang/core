@@ -1,7 +1,7 @@
 {
   "name": "@tagdown/core",
-  "version": "0.1.1",
-  "description": "Common functionality to ease working with the core of the Tagdown lightweight markup language",
+  "version": "0.1.2",
+  "description": "The core of the Tagdown lightweight markup language",
   "keywords": [
     "tagdown",
     "markup",
